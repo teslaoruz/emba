@@ -3,9 +3,10 @@
 cd "$(dirname "$0")/.."
 H=hook/emba-hook
 fail() { echo "FAIL: $*"; exit 1; }
-ipc() { qs -p . ipc call emba "$@"; }
+ipc() { $PY bin/emba "$@"; }
 
-sh dev/run.sh > /dev/null
+PY=${PY:-python3}
+$PY bin/emba quit > /dev/null; sleep 0.5; $PY bin/emba start > /dev/null || fail "emba did not start"
 echo '{"hook_event_name":"SessionStart","session_id":"t-1","cwd":"/tmp/demo"}' | $H
 ipc state | grep -q '"t-1"' || fail "SessionStart not seen"
 
@@ -40,7 +41,7 @@ echo '{"hook_event_name":"Notification","session_id":"gm","cwd":"/tmp/gm","notif
 ipc state | grep -q '"sid":"gemini-gm"[^}]*"state":"waiting"' || ipc state | grep -q '"state":"waiting"[^}]*"sid":"gemini-gm"' || fail "gemini attention not waiting: $(ipc state)"
 
 # emba not running: instant, silent
-sh dev/run.sh stop
+$PY bin/emba quit > /dev/null; sleep 0.5
 start=$(date +%s%N)
 out=$(echo "$req" | $H)
 ms=$(( ($(date +%s%N) - start) / 1000000 ))

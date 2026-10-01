@@ -101,7 +101,7 @@ Rectangle {
                             }
                         }
                         Button {
-                            visible: agentRow.info.installed || agentRow.info.connected
+                            visible: !!(agentRow.info.installed || agentRow.info.connected)
                             text: App.busy ? "…" : agentRow.info.connected ? "Disconnect" : "Connect"
                             primary: !agentRow.info.connected
                             onClicked: App.run([agentRow.info.connected ? "disconnect" : "connect", agentRow.modelData[0]])
