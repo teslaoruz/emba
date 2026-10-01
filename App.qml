@@ -203,6 +203,12 @@ Singleton {
         switch (m.ev) {
         case "SessionStart":
             s.state = "idle";
+            s.started = s.started || Date.now();
+            root.fire("session_start", {
+                name: s.name,
+                cwd: s.cwd,
+                agent: s.agent
+            });
             break;
         case "UserPromptSubmit":
             s.state = "thinking";
@@ -217,6 +223,13 @@ Singleton {
             s.state = "waiting";
             s.text = m.text ?? "";
             push(`needs you: ${m.text ?? ""}`);
+            root.fire("permission", {
+                name: s.name,
+                cwd: s.cwd,
+                agent: s.agent,
+                tool: "",
+                command: m.text ?? ""
+            });
             break;
         case "Notification":
             if (/waiting for your input/i.test(m.text ?? ""))
@@ -226,6 +239,12 @@ Singleton {
             s.state = "done";
             s.text = m.text ?? "";
             root.finished(m.sid);
+            root.fire("finished", {
+                name: s.name,
+                cwd: s.cwd,
+                agent: s.agent,
+                text: s.text || "Finished."
+            });
             break;
         case "PermissionRequest":
             if (!m.id || !/^[A-Za-z0-9_-]{1,128}$/.test(m.id))
@@ -244,6 +263,13 @@ Singleton {
                 }]);
             sock.pendingId = m.id;
             root.permissionAsked();
+            root.fire("permission", {
+                name: s.name,
+                cwd: s.cwd,
+                agent: s.agent,
+                tool: m.tool,
+                command: m.full || m.target
+            });
             break;
         }
         map[m.sid] = s;
@@ -302,6 +328,10 @@ Singleton {
             const was = limits[w]?.used ?? 0;
             if (pct >= cfg.limitWarn && was < cfg.limitWarn)
                 root.limitWarning(w, pct);
+                root.fire("limit", {
+                    window: w,
+                    percent: pct
+                });
         }
         limits = next;
     }
@@ -420,7 +450,7 @@ Singleton {
         case "ollama":
             return ["ollama", "run", m || "llama3.2", text];
         default:
-            return ["claude", "-p", text].concat(m ? ["--model", m] : [], dirs.flatMap(d => ["--add-dir", d]), files?.length ? ["--allowedTools", "Read"] : []);
+            return ["claude", "-p", text].concat(m ? ["--model", m] : [], [].concat(...dirs.map(d => ["--add-dir", d])), files?.length ? ["--allowedTools", "Read"] : []);
         }
     }
 
@@ -597,6 +627,49 @@ Singleton {
             }
         }
     }
+
+    // -------------------------------------------------------------- plugins
+    // Folders with a plugin.json (see plugins/ and `emba plugins new`).
+    // Commands are argv lists: placeholders fill whole arguments and nothing
+    // goes through a shell, so agent output cannot inject commands.
+    readonly property var plugins: (status.plugins ?? []).filter(p => !p.error && (cfg.plugins ?? []).includes(p.id))
+    readonly property string osKey: Qt.platform.os === "osx" ? "darwin" : Qt.platform.os
+
+    function pluginArgv(spec, vars) {
+        const argv = Array.isArray(spec) ? spec : spec?.[osKey];
+        if (!Array.isArray(argv) || !argv.length)
+            return null;
+        return argv.map(a => String(a).replace(/\{(\w+)\}/g, (all, k) => k in vars ? String(vars[k] ?? "") : all));
+    }
+
+    function fire(event, vars) {
+        for (const p of plugins) {
+            const argv = pluginArgv(p.events?.[event], Object.assign({
+                plugin: p.dir
+            }, vars));
+            if (argv)
+                Quickshell.execDetached(argv);
+        }
+    }
+
+    // buttons the enabled plugins add for a session
+    function actionsFor(sid) {
+        const s = map[sid];
+        if (!s)
+            return [];
+        // no Array.flatMap in this JS engine
+        return [].concat(...plugins.map(p => (p.actions ?? []).map(a => ({
+                        label: a.label,
+                        argv: pluginArgv(a.run, {
+                            plugin: p.dir,
+                            cwd: s.cwd,
+                            name: s.name,
+                            agent: s.agent
+                        })
+                    })))).filter(a => a.argv);
+    }
+
+    readonly property var pluginViews: plugins.filter(p => p.qml).map(p => (p.dir.startsWith("/") ? "file://" : "file:///") + `${p.dir}/${p.qml}`.replace(/\\/g, "/"))
 
     // ------------------------------------------------------------------ ipc
     signal toggleRequested

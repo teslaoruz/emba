@@ -1,0 +1,15 @@
+{
+  "name": "Open in…",
+  "description": "Buttons to open a session's folder in your editor or file manager.",
+  "actions": [
+    { "label": "Editor", "run": ["code", "{cwd}"] },
+    {
+      "label": "Folder",
+      "run": {
+        "linux": ["xdg-open", "{cwd}"],
+        "darwin": ["open", "{cwd}"],
+        "windows": ["explorer", "{cwd}"]
+      }
+    }
+  ]
+}

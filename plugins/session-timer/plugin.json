@@ -1,0 +1,5 @@
+{
+  "name": "Session timer",
+  "description": "Shows how long each session has been running. An example of a QML plugin.",
+  "qml": "View.qml"
+}

@@ -20,6 +20,7 @@ usage: emba [command]
   listen                talk to Emba (voice must be on in settings)
   capture               just take the screenshot and print its path
   voice-install         download the local speech models (free, ~250 MB)
+  plugins [new NAME]    list plugins, or start a new one in your config folder
 
   status [--json]       what is running and connected
   doctor                check everything Emba needs
@@ -31,6 +32,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -254,6 +256,52 @@ def voice_install():
     print("voice is ready: turn it on in emba settings")
 
 
+def emba_config_dir():
+    """Same rule as App.qml's configDir."""
+    if os.environ.get("XDG_CONFIG_HOME"):
+        return Path(os.environ["XDG_CONFIG_HOME"]) / "emba"
+    if SYSTEM == "Windows":
+        return Path(os.environ.get("APPDATA", Path.home())) / "emba"
+    return Path.home() / ".config" / "emba"
+
+
+def plugins():
+    """Every plugin folder with a readable plugin.json; the user's win over bundled ones."""
+    found = {}
+    for builtin, root in ((True, APP / "plugins"), (False, emba_config_dir() / "plugins")):
+        for manifest in sorted(root.glob("*/plugin.json")) if root.exists() else []:
+            try:
+                meta = json.loads(manifest.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                meta = {"error": str(e)}
+            pid = manifest.parent.name
+            found[pid] = {**meta, "id": pid, "dir": str(manifest.parent), "builtin": builtin}
+    return list(found.values())
+
+
+PLUGIN_TEMPLATE = {
+    "name": "My plugin",
+    "description": "What it does, in one line.",
+    "events": {"finished": ["notify-send", "Emba", "{name} is done"]},
+    "actions": [{"label": "Open folder", "run": ["xdg-open", "{cwd}"]}],
+    "qml": "",
+}
+
+
+def plugins_cmd(rest):
+    if rest[:1] == ["new"] and len(rest) > 1:
+        d = emba_config_dir() / "plugins" / re.sub(r"[^a-z0-9-]+", "-", rest[1].lower()).strip("-")
+        if d.exists():
+            sys.exit(f"{d} already exists")
+        d.mkdir(parents=True)
+        (d / "plugin.json").write_text(json.dumps({**PLUGIN_TEMPLATE, "name": rest[1]}, indent=2) + "\n")
+        print(f"created {d}\nedit plugin.json, then turn it on in emba settings")
+        return
+    for p in plugins():
+        tag = "bundled" if p["builtin"] else "yours"
+        print(f"{p['id']:<20} {p.get('name', '?')} ({tag}) — {p.get('error') or p.get('description', '')}")
+
+
 def status():
     return {
         "running": running(),
@@ -263,6 +311,7 @@ def status():
         "ask": [t for t in ASK_TOOLS if shutil.which(t)],
         "python": venv_python(),
         "voice": voice_ready(venv_python()),
+        "plugins": plugins(),
     }
 
 
@@ -336,6 +385,8 @@ def main():
             print(f"running: {st['running']}\nautostart: {st['autostart']}\nhost: {st['host']}")
             for a, v in st["agents"].items():
                 print(f"{a}: {'connected' if v['connected'] else 'installed' if v['installed'] else 'not installed'}")
+    elif cmd == "plugins":
+        plugins_cmd(rest)
     elif cmd == "voice-install":
         voice_install()
     elif cmd == "capture":

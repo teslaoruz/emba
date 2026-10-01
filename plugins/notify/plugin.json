@@ -1,0 +1,16 @@
+{
+  "name": "Desktop notifications",
+  "description": "A system notification when a session finishes or needs you.",
+  "events": {
+    "finished": {
+      "linux": ["notify-send", "-a", "Emba", "{name} is done", "{text}"],
+      "darwin": ["osascript", "-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", "{name} is done", "{text}"],
+      "windows": ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "{plugin}/notify.ps1", "{name} is done", "{text}", "Info"]
+    },
+    "permission": {
+      "linux": ["notify-send", "-a", "Emba", "-u", "critical", "{name} needs you", "{tool}: {command}"],
+      "darwin": ["osascript", "-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", "{name} needs you", "{tool}: {command}"],
+      "windows": ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "{plugin}/notify.ps1", "{name} needs you", "{tool}: {command}", "Warning"]
+    }
+  }
+}

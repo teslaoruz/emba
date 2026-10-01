@@ -118,6 +118,7 @@ Rectangle {
                 }
 
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Show Claude Code usage limits"
                     hint: "Reads them from your statusline; its output stays the same"
                     checked: !!win.st.agents?.claude?.statusline
@@ -133,6 +134,7 @@ Rectangle {
                     }
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Start when I log in"
                     checked: !!win.st.autostart
                     enabled: !App.busy
@@ -270,6 +272,7 @@ Rectangle {
 
             Card {
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Talk to Emba"
                     hint: win.st.voice ? "Speech stays on this computer (Whisper + Piper)" : "Needs a one-time download (~250 MB), then works offline"
                     checked: !!App.cfg.voice
@@ -293,12 +296,14 @@ Rectangle {
                     }
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
                     text: "Shake the cursor to talk"
                     checked: !!App.cfg.voiceShake
                     onToggled: on => App.setCfg({ voiceShake: on })
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
                     text: "Wake on “Hey Emba”"
                     hint: "Keeps the microphone open while Emba runs"
@@ -306,6 +311,7 @@ Rectangle {
                     onToggled: on => App.setCfg({ voiceWake: on })
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
                     text: "Read answers aloud"
                     checked: !!App.cfg.voiceReply
@@ -342,27 +348,71 @@ Rectangle {
                 }
             }
 
+            // ---- plugins ----
+            Section { text: "Plugins" }
+
+            Card {
+                Repeater {
+                    model: win.st.plugins ?? []
+
+                    Toggle {
+                        Layout.fillWidth: true
+                        required property var modelData
+
+                        text: modelData.name ?? modelData.id
+                        hint: modelData.error ? `broken plugin.json: ${modelData.error}` : `${modelData.description ?? ""}${modelData.builtin ? "" : "  (yours)"}`
+                        checked: (App.cfg.plugins ?? []).includes(modelData.id)
+                        enabled: !modelData.error
+                        onToggled: on => {
+                            const now = (App.cfg.plugins ?? []).filter(x => x !== modelData.id);
+                            App.setCfg({ plugins: on ? now.concat([modelData.id]) : now });
+                        }
+                    }
+                }
+                RowLayout {
+                    Button {
+                        text: "Open plugins folder"
+                        onClicked: {
+                            const dir = App.configPath.replace(/config\.json$/, "plugins");
+                            App.run(["plugins", "new", "my-plugin"]);
+                            Qt.openUrlExternally(dir.startsWith("/") ? `file://${dir}` : `file:///${dir.replace(/\\/g, "/")}`);
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "A plugin is a folder with a plugin.json: run commands on events, add buttons, or show a QML panel. See PLUGINS.md."
+                        color: Theme.faint
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
             // ---- behaviour ----
             Section { text: "Behaviour" }
 
             Card {
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Open for permission requests"
                     checked: App.cfg.autoOpenOnPermission
                     onToggled: on => App.setCfg({ autoOpenOnPermission: on })
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Celebrate when a session finishes"
                     checked: App.cfg.celebrate
                     onToggled: on => App.setCfg({ celebrate: on })
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Hide while nothing is running"
                     hint: "leaves a small nub to hover"
                     checked: App.cfg.hideWhenIdle
                     onToggled: on => App.setCfg({ hideWhenIdle: on })
                 }
                 Toggle {
+                    Layout.fillWidth: true
                     text: "Eyes follow the cursor"
                     hint: "Hyprland"
                     checked: App.cfg.trackCursor

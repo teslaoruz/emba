@@ -720,9 +720,44 @@ Item {
                 }
             }
 
-            Pill {
-                text: `Ask ${App.askLabel}`
-                onClicked: root.expand("ask")
+            // panels from QML plugins
+            Repeater {
+                model: App.pluginViews
+
+                Loader {
+                    required property string modelData
+
+                    Layout.fillWidth: true
+                    source: modelData
+                    onLoaded: {
+                        item.app = App;
+                        item.theme = Theme;
+                    }
+                }
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Pill {
+                    text: `Ask ${App.askLabel}`
+                    onClicked: root.expand("ask")
+                }
+                Pill {
+                    text: "⛶ Look"
+                    onClicked: App.look()
+                }
+                Repeater {
+                    model: App.actionsFor(root.sessions[0]?.sid ?? "")
+
+                    Pill {
+                        required property var modelData
+
+                        text: modelData.label
+                        onClicked: Quickshell.execDetached(modelData.argv)
+                    }
+                }
             }
         }
     }
@@ -880,6 +915,16 @@ Item {
                     onClicked: {
                         App.focus(root.finishedSid);
                         root.collapse();
+                    }
+                }
+                Repeater {
+                    model: App.actionsFor(root.finishedSid)
+
+                    Pill {
+                        required property var modelData
+
+                        text: modelData.label
+                        onClicked: Quickshell.execDetached(modelData.argv)
                     }
                 }
                 Pill {
