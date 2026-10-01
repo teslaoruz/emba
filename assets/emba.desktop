@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Emba
+GenericName=Coding agent companion
+Comment=A red panda that keeps an eye on your coding agents
+Exec=emba start
+Icon=emba
+Terminal=false
+Categories=Utility;Development;
+Keywords=claude;codex;gemini;opencode;agent;ai;panda;
+Actions=settings;look;
+
+[Desktop Action settings]
+Name=Settings
+Exec=emba settings
+
+[Desktop Action look]
+Name=Ask about something on screen
+Exec=emba look

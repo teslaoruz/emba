@@ -1,0 +1,43 @@
+# Maintainer: teslaoruz <irshad.oruzgani@gmail.com>
+pkgname=emba-git
+_pkgname=emba
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A red panda that keeps an eye on your coding agents (Claude Code, Codex, Gemini CLI, opencode)"
+arch=('any')
+url="https://github.com/teslaoruz/emba"
+license=('MIT')
+depends=('python' 'quickshell')
+optdepends=(
+    'python-pyside6: run on desktops without layer-shell (GNOME, X11)'
+    'grim: look at a part of the screen (Wayland)'
+    'slurp: look at a part of the screen (Wayland)'
+    'wl-clipboard: copy buttons'
+    'libnotify: desktop notifications plugin'
+    'portaudio: voice'
+)
+makedepends=('git')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source=("git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "0.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    cd "$_pkgname"
+    install -d "$pkgdir/usr/share/$_pkgname"
+    cp -r App.qml Theme.qml Pet.qml Island.qml Panda.qml Settings.qml shell.qml \
+        bin hook desktop voice plugins integrations assets \
+        "$pkgdir/usr/share/$_pkgname/"
+    install -Dm755 /dev/stdin "$pkgdir/usr/bin/emba" << 'EOF'
+#!/bin/sh
+exec python3 /usr/share/emba/bin/emba "$@"
+EOF
+    install -Dm644 assets/emba.desktop "$pkgdir/usr/share/applications/emba.desktop"
+    install -Dm644 assets/emba.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/emba.svg"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

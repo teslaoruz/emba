@@ -106,7 +106,7 @@ def use_quickshell():
 def host_command():
     if use_quickshell():
         return ["qs", "-p", str(APP)]
-    py = sys.executable
+    py = venv_python()  # the one with PySide6
     if SYSTEM == "Windows" and py.lower().endswith("python.exe"):
         py = py[:-len("python.exe")] + "pythonw.exe"  # no console window
     return [py, str(APP / "desktop" / "host.py")]
@@ -217,9 +217,23 @@ def autostart(on):
 
 # ---------------------------------------------------------------- status
 
+def user_data():
+    if SYSTEM == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "emba"
+    if SYSTEM == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "emba"
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "emba"
+
+
+def venv_dir():
+    """Next to the app when that's writable (a git checkout), else per user (a package)."""
+    here = APP / ".venv"
+    return here if here.exists() or os.access(APP, os.W_OK) else user_data() / "venv"
+
+
 def venv_python():
-    """The app's own venv (PySide6, voice) if the installer made one."""
-    p = APP / ".venv" / ("Scripts/python.exe" if SYSTEM == "Windows" else "bin/python")
+    """The app's own venv (PySide6, voice) if one was made."""
+    p = venv_dir() / ("Scripts/python.exe" if SYSTEM == "Windows" else "bin/python")
     return str(p) if p.exists() else sys.executable
 
 
@@ -251,8 +265,9 @@ VOICE_PACKAGES = ["faster-whisper", "sounddevice", "piper-tts"]
 
 def voice_install():
     """Put the voice packages in the app's own venv and fetch the models."""
-    venv = APP / ".venv"
+    venv = venv_dir()
     if not venv.exists():
+        venv.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
     py = venv_python()
     subprocess.run([py, "-m", "pip", "install", "--upgrade", "--quiet"] + VOICE_PACKAGES, check=True)
