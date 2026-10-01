@@ -30,6 +30,8 @@ DECISION_TIMEOUT = 570  # agents kill permission hooks at 600 s
 
 def address():
     """Where Emba listens. Must match App.qml / the desktop host."""
+    if os.environ.get("EMBA_SOCKET"):  # tests and demos run a separate Emba
+        return os.environ["EMBA_SOCKET"]
     if os.name == "nt":
         return rf"\\.\pipe\emba-{getpass.getuser()}"
     base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()

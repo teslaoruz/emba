@@ -338,10 +338,33 @@ Singleton {
         limits = next;
     }
 
+    // the desktop host passes its own address (named pipe on Windows)
+    readonly property string socketPath: Quickshell.env("EMBA_SOCKET") || `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
+    property bool listening: false
+
+    // One Emba at a time: if another one already answers on the socket, this
+    // one bows out instead of stealing the socket from under it.
+    Socket {
+        id: probe
+
+        path: root.socketPath
+        onConnectedChanged: if (connected) {
+            console.log("emba: already running, leaving");
+            Qt.quit();
+        }
+        onError: root.listening = true  // nobody there: our turn
+        Component.onCompleted: connected = true
+    }
+    Timer {
+        interval: 500
+        running: !root.listening
+        onTriggered: if (!probe.connected)
+            root.listening = true
+    }
+
     SocketServer {
-        active: true
-        // the desktop host passes its own address (named pipe on Windows)
-        path: Quickshell.env("EMBA_SOCKET") || `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
+        active: root.listening
+        path: root.socketPath
 
         handler: Socket {
             id: conn

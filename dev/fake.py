@@ -11,7 +11,7 @@ import os
 import socket
 import sys
 
-SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "emba.sock")
+SOCK = os.environ.get("EMBA_SOCKET") or os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "emba.sock")
 A = {"sid": "fake-a", "cwd": "/home/you/code/invoices", "pid": 1}
 B = {"sid": "fake-b", "cwd": "/home/you/notes", "pid": 1}
 

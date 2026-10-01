@@ -32,6 +32,8 @@ SHARED = ["App.qml", "Theme.qml", "Pet.qml", "Island.qml", "Notch.qml", "Panda.q
 
 def socket_address():
     """Same rule as hook/emba-hook's address()."""
+    if os.environ.get("EMBA_SOCKET"):
+        return os.environ["EMBA_SOCKET"]
     if os.name == "nt":
         return rf"\\.\pipe\emba-{getpass.getuser()}"
     run = os.environ.get("XDG_RUNTIME_DIR")
@@ -349,23 +351,38 @@ class FileView(QObject):
 
 
 class Socket(QObject):
+    """A server-side connection (made by SocketServer) or a client (set path, then connected = true)."""
     connectedChanged = Signal()
+    error = Signal(int, arguments=["error"])
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._sock = None
         self._parser = None
+        self._path = ""
+        self._served = False
 
-    def _attach(self, sock):
+    def _attach(self, sock, served=True):
         self._sock = sock
+        self._served = served
         sock.readyRead.connect(lambda: self._parser and self._parser.feed(bytes(sock.readAll()).decode(errors="replace")))
         sock.disconnected.connect(self._gone)
+        self.connectedChanged.emit()
 
     def _gone(self):
         if self._sock is not None:
             self._sock = None
             self.connectedChanged.emit()
-            self.deleteLater()
+            if self._served:  # QML did not create it, so nobody else will clean it up
+                self.deleteLater()
+
+    def _get_path(self):
+        return self._path
+
+    def _set_path(self, p):
+        self._path = p
+
+    path = Property(str, _get_path, _set_path)
 
     def _get_connected(self):
         return self._sock is not None
@@ -373,6 +390,11 @@ class Socket(QObject):
     def _set_connected(self, on):
         if not on and self._sock is not None:
             self._sock.disconnectFromServer()
+        elif on and self._sock is None and self._path:
+            s = QLocalSocket(self)
+            s.connected.connect(lambda: self._attach(s, served=False))
+            s.errorOccurred.connect(lambda e: self.error.emit(int(e.value)) if self._sock is None else None)
+            s.connectToServer(self._path.removeprefix("\\\\.\\pipe\\") if os.name == "nt" else self._path)
 
     connected = Property(bool, _get_connected, _set_connected, notify=connectedChanged)
 
