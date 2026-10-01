@@ -7,15 +7,23 @@ import qs
 
 // The settings page: `emba settings`, the gear on the island, or the desktop
 // entry. Each host wraps it in its own window. Every control writes straight
-// to ~/.config/emba/config.json.
+// to Emba's config file. Short labels, one switch per line.
 Rectangle {
     id: win
 
-    implicitWidth: 460
-    implicitHeight: 680
+    implicitWidth: 440
+    implicitHeight: 660
     color: Theme.base
 
     readonly property var st: App.status
+    readonly property var agentNames: ({
+            claude: "Claude Code",
+            codex: "Codex",
+            opencode: "opencode",
+            gemini: "Gemini CLI"
+        })
+    // only agents on this computer (or still hooked up) are worth a line
+    readonly property var agents: Object.keys(agentNames).filter(a => st.agents?.[a]?.installed || st.agents?.[a]?.connected)
 
     Flickable {
         anchors.fill: parent
@@ -28,32 +36,29 @@ Rectangle {
             x: 24
             y: 20
             width: parent.width - 48
-            spacing: 14
+            spacing: 12
 
-            // ---- header ----
             RowLayout {
-                spacing: 14
+                spacing: 12
 
                 Panda {
-                    id: panda
-
-                    Layout.preferredWidth: 76
-                    Layout.preferredHeight: 76
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 64
                     bodyColor: App.cfg.color
-                    mood: App.pending.length ? "waiting" : "idle"
+                    mood: Pet.need || "idle"
                     Component.onCompleted: wave()
                 }
                 ColumnLayout {
-                    spacing: 2
+                    spacing: 0
 
                     Text {
                         text: "Emba"
                         color: Theme.text
-                        font.pixelSize: 22
+                        font.pixelSize: 20
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: "A red panda that keeps an eye on your coding agents"
+                        text: "your coding buddy"
                         color: Theme.dim
                         font.pixelSize: 12
                     }
@@ -65,76 +70,42 @@ Rectangle {
 
             Card {
                 Repeater {
-                    model: [["claude", "Claude Code", "approve from Emba"], ["codex", "Codex", "approve from Emba"], ["opencode", "opencode", "approve from Emba for 30 s, then the terminal"], ["gemini", "Gemini CLI", "watch only; approve in its terminal"]]
+                    model: win.agents
 
-                    RowLayout {
-                        id: agentRow
+                    Toggle {
+                        required property string modelData
 
-                        required property var modelData
-                        readonly property var info: win.st.agents?.[modelData[0]] ?? {}
-
-                        Layout.fillWidth: true
-                        opacity: info.installed || info.connected ? 1 : 0.55
-
-                        Rectangle {
-                            width: 8
-                            height: 8
-                            radius: 4
-                            color: agentRow.info.connected ? Theme.ok : agentRow.info.installed ? Theme.warn : Theme.faint
-                        }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-
-                            Text {
-                                text: agentRow.modelData[1]
-                                color: Theme.text
-                                font.pixelSize: 13
-                                font.weight: Font.Medium
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: agentRow.info.connected ? `Connected · ${agentRow.modelData[2]}` : agentRow.info.installed ? "Installed, not connected" : "Not installed"
-                                color: Theme.dim
-                                font.pixelSize: 11
-                                wrapMode: Text.Wrap
-                            }
-                        }
-                        Button {
-                            visible: !!(agentRow.info.installed || agentRow.info.connected)
-                            text: App.busy ? "…" : agentRow.info.connected ? "Disconnect" : "Connect"
-                            primary: !agentRow.info.connected
-                            onClicked: App.run([agentRow.info.connected ? "disconnect" : "connect", agentRow.modelData[0]])
-                        }
+                        text: win.agentNames[modelData]
+                        checked: !!win.st.agents?.[modelData]?.connected
+                        enabled: !App.busy
+                        onToggled: on => App.run([on ? "connect" : "disconnect", modelData])
                     }
                 }
-
                 Text {
-                    Layout.fillWidth: true
-                    text: "Connecting adds Emba's hooks to the agent's settings file and keeps a backup. Restart open sessions afterwards."
-                    color: Theme.faint
-                    font.pixelSize: 10
+                    visible: win.agents.length === 0
+                    text: "No agents found. Install Claude Code, Codex, opencode or Gemini CLI."
+                    color: Theme.dim
+                    font.pixelSize: 12
                     wrapMode: Text.Wrap
-                }
-
-                Toggle {
                     Layout.fillWidth: true
-                    text: "Show Claude Code usage limits"
-                    hint: "Reads them from your statusline; its output stays the same"
-                    checked: !!win.st.agents?.claude?.statusline
-                    enabled: !!win.st.agents?.claude?.connected && !App.busy
-                    onToggled: on => App.run(on ? ["connect", "claude", "--statusline"] : ["connect", "claude"])
                 }
                 Labelled {
+                    visible: (win.st.ask ?? []).length > 1
                     text: "Ask with"
                     Segmented {
-                        options: [["Auto", "auto"]].concat((win.st.ask ?? []).map(t => [t, t]))
-                        value: App.cfg.askWith
+                        options: (win.st.ask ?? []).map(t => [t, t])
+                        value: App.askTool
                         onPicked: v => App.setCfg({ askWith: v })
                     }
                 }
                 Toggle {
-                    Layout.fillWidth: true
+                    visible: !!win.st.agents?.claude?.connected
+                    text: "Show Claude usage"
+                    checked: !!win.st.agents?.claude?.statusline
+                    enabled: !App.busy
+                    onToggled: on => App.run(on ? ["connect", "claude", "--statusline"] : ["connect", "claude"])
+                }
+                Toggle {
                     text: "Start when I log in"
                     checked: !!win.st.autostart
                     enabled: !App.busy
@@ -142,18 +113,18 @@ Rectangle {
                 }
             }
 
-            // ---- placement ----
-            Section { text: "Where Emba sits" }
+            // ---- place ----
+            Section { text: "Where" }
 
             Card {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 18
 
-                    // a little screen with nine spots
+                    // a little screen with eight spots
                     Rectangle {
-                        width: 132
-                        height: 84
+                        width: 120
+                        height: 76
                         radius: 10
                         color: Theme.surface
                         border.width: 1
@@ -168,19 +139,21 @@ Rectangle {
                                 model: ["top-left", "top", "top-right", "left", "", "right", "bottom-left", "bottom", "bottom-right"]
 
                                 Item {
-                                    required property string modelData
+                                    id: spot
 
-                                    width: 40
-                                    height: 24
+                                    required property string modelData
+                                    readonly property bool on: App.cfg.position === modelData
+
+                                    width: 36
+                                    height: 21
 
                                     Rectangle {
-                                        visible: parent.modelData !== ""
+                                        visible: spot.modelData !== ""
                                         anchors.centerIn: parent
-                                        readonly property bool on: App.cfg.position === parent.modelData
-                                        width: on ? 26 : 18
-                                        height: on ? 12 : 8
+                                        width: spot.on ? 24 : 16
+                                        height: spot.on ? 11 : 7
                                         radius: height / 2
-                                        color: on ? App.cfg.color : spotHover.hovered ? Theme.dim : Theme.faint
+                                        color: spot.on ? App.cfg.color : spotHover.hovered ? Theme.dim : Theme.faint
 
                                         Behavior on width { NumberAnimation { duration: 160 } }
                                         Behavior on color { ColorAnimation { duration: 160 } }
@@ -188,12 +161,12 @@ Rectangle {
                                     HoverHandler {
                                         id: spotHover
 
-                                        enabled: parent.modelData !== ""
+                                        enabled: spot.modelData !== ""
                                         cursorShape: Qt.PointingHandCursor
                                     }
                                     TapHandler {
-                                        enabled: parent.modelData !== ""
-                                        onTapped: App.setCfg({ position: parent.modelData })
+                                        enabled: spot.modelData !== ""
+                                        onTapped: App.setCfg({ position: spot.modelData })
                                     }
                                 }
                             }
@@ -213,9 +186,10 @@ Rectangle {
                             }
                         }
                         Labelled {
+                            visible: Quickshell.screens.length > 1
                             text: "Screen"
                             Segmented {
-                                options: [["First", ""]].concat(Quickshell.screens.map(s => [s.name, s.name]))
+                                options: [["Main", ""]].concat(Quickshell.screens.map(s => [s.name, s.name]))
                                 value: App.cfg.screen
                                 onPicked: v => App.setCfg({ screen: v })
                             }
@@ -228,18 +202,11 @@ Rectangle {
             Section { text: "Look" }
 
             Card {
-                Labelled {
-                    text: "Colours"
-                    Segmented {
-                        options: [["Auto", "auto"], ["Caelestia", "caelestia"], ["pywal", "pywal"], ["Custom", "custom"], ["Built-in", "default"]]
-                        value: App.cfg.theme
-                        onPicked: v => App.setCfg({ theme: v })
-                    }
-                }
-                Text {
-                    text: `Using: ${Theme.source}` + (Theme.source === "default" && App.cfg.theme !== "default" ? "  (nothing found for that choice)" : "")
-                    color: Theme.dim
-                    font.pixelSize: 11
+                Toggle {
+                    text: "Match my desktop colours"
+                    hint: App.cfg.theme !== "default" && Theme.source !== "default" ? `using ${Theme.source}` : ""
+                    checked: App.cfg.theme !== "default"
+                    onToggled: on => App.setCfg({ theme: on ? "auto" : "default" })
                 }
                 Labelled {
                     text: "Fur"
@@ -250,16 +217,18 @@ Rectangle {
                             model: ["#e2683c", "#c8503a", "#a8643c", "#e88a5b", "#d9a05b", "#8a6f5c"]
 
                             Rectangle {
+                                id: swatch
+
                                 required property string modelData
 
-                                width: 24
-                                height: 24
-                                radius: 12
+                                width: 22
+                                height: 22
+                                radius: 11
                                 color: modelData
                                 border.width: App.cfg.color === modelData ? 3 : 0
                                 border.color: Theme.text
 
-                                TapHandler { onTapped: App.setCfg({ color: parent.modelData }) }
+                                TapHandler { onTapped: App.setCfg({ color: swatch.modelData }) }
                                 HoverHandler { cursorShape: Qt.PointingHandCursor }
                             }
                         }
@@ -272,65 +241,52 @@ Rectangle {
 
             Card {
                 Toggle {
-                    Layout.fillWidth: true
+                    visible: !!win.st.voice
                     text: "Talk to Emba"
-                    hint: win.st.voice ? "Speech stays on this computer (Whisper + Piper)" : "Needs a one-time download (~250 MB), then works offline"
+                    hint: "stays on this computer"
                     checked: !!App.cfg.voice
-                    enabled: !!win.st.voice
                     onToggled: on => App.setCfg({ voice: on })
                 }
                 RowLayout {
                     visible: !win.st.voice
+                    Layout.fillWidth: true
 
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Talk to Emba"
+                        color: Theme.text
+                        font.pixelSize: 13
+                    }
                     Button {
-                        text: App.busy ? "Installing…" : "Install voice"
+                        text: App.busy ? "Getting ready…" : "Set up"
                         primary: true
                         onClicked: App.run(["voice-install"])
                     }
-                    Text {
-                        Layout.fillWidth: true
-                        text: "free and local; nothing is sent anywhere"
-                        color: Theme.faint
-                        font.pixelSize: 10
-                        wrapMode: Text.Wrap
-                    }
                 }
                 Toggle {
-                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
-                    text: "Shake the cursor to talk"
+                    text: "Shake the mouse to talk"
                     checked: !!App.cfg.voiceShake
                     onToggled: on => App.setCfg({ voiceShake: on })
                 }
                 Toggle {
-                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
-                    text: "Wake on “Hey Emba”"
-                    hint: "Keeps the microphone open while Emba runs"
+                    text: "Listen for “Hey Emba”"
+                    hint: "keeps the microphone on"
                     checked: !!App.cfg.voiceWake
                     onToggled: on => App.setCfg({ voiceWake: on })
                 }
                 Toggle {
-                    Layout.fillWidth: true
                     visible: !!App.cfg.voice
-                    text: "Read answers aloud"
+                    text: "Answer out loud"
                     checked: !!App.cfg.voiceReply
                     onToggled: on => App.setCfg({ voiceReply: on })
                 }
                 Labelled {
                     visible: !!App.cfg.voice
-                    text: "Hearing"
-                    Segmented {
-                        options: [["Fast", "tiny"], ["Balanced", "base"], ["Accurate", "small"]]
-                        value: App.cfg.voiceModel
-                        onPicked: v => App.setCfg({ voiceModel: v })
-                    }
-                }
-                Labelled {
-                    visible: !!App.cfg.voice
                     text: "Voice"
                     Segmented {
-                        options: [["Amy", "en_US-amy-medium"], ["Ryan", "en_US-ryan-medium"], ["Lessac", "en_US-lessac-medium"], ["Alba", "en_GB-alba-medium"]]
+                        options: [["Amy", "en_US-amy-medium"], ["Ryan", "en_US-ryan-medium"], ["Alba", "en_GB-alba-medium"]]
                         value: App.cfg.voiceName
                         onPicked: v => {
                             App.setCfg({ voiceName: v });
@@ -338,29 +294,57 @@ Rectangle {
                         }
                     }
                 }
-                Text {
-                    Layout.fillWidth: true
-                    visible: !!App.cfg.voice
-                    text: "Voice never answers a permission by itself: saying “allow” only highlights the button."
-                    color: Theme.faint
-                    font.pixelSize: 10
-                    wrapMode: Text.Wrap
+            }
+
+            // ---- emba ----
+            Section { text: "Emba" }
+
+            Card {
+                Toggle {
+                    text: "Gets hungry and sleepy"
+                    hint: "a little pet to look after"
+                    checked: App.cfg.pet !== false
+                    onToggled: on => App.setCfg({ pet: on })
+                }
+                Toggle {
+                    text: "Pop up when an agent asks"
+                    checked: App.cfg.autoOpenOnPermission
+                    onToggled: on => App.setCfg({ autoOpenOnPermission: on })
+                }
+                Toggle {
+                    text: "Cheer when work is done"
+                    checked: App.cfg.celebrate
+                    onToggled: on => App.setCfg({ celebrate: on })
+                }
+                Toggle {
+                    text: "Hide when nothing is running"
+                    checked: App.cfg.hideWhenIdle
+                    onToggled: on => App.setCfg({ hideWhenIdle: on })
+                }
+                Toggle {
+                    text: "Eyes follow the mouse"
+                    checked: App.cfg.trackCursor
+                    onToggled: on => App.setCfg({ trackCursor: on })
                 }
             }
 
             // ---- plugins ----
-            Section { text: "Plugins" }
+            Section {
+                visible: (win.st.plugins ?? []).length > 0
+                text: "Plugins"
+            }
 
             Card {
+                visible: (win.st.plugins ?? []).length > 0
+
                 Repeater {
                     model: win.st.plugins ?? []
 
                     Toggle {
-                        Layout.fillWidth: true
                         required property var modelData
 
                         text: modelData.name ?? modelData.id
-                        hint: modelData.error ? `broken plugin.json: ${modelData.error}` : `${modelData.description ?? ""}${modelData.builtin ? "" : "  (yours)"}`
+                        hint: modelData.error ? "can't be read" : (modelData.description ?? "")
                         checked: (App.cfg.plugins ?? []).includes(modelData.id)
                         enabled: !modelData.error
                         onToggled: on => {
@@ -369,80 +353,23 @@ Rectangle {
                         }
                     }
                 }
-                RowLayout {
-                    Button {
-                        text: "Open plugins folder"
-                        onClicked: {
-                            const dir = App.configPath.replace(/config\.json$/, "plugins");
-                            App.run(["plugins", "new", "my-plugin"]);
-                            Qt.openUrlExternally(dir.startsWith("/") ? `file://${dir}` : `file:///${dir.replace(/\\/g, "/")}`);
-                        }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: "A plugin is a folder with a plugin.json: run commands on events, add buttons, or show a QML panel. See PLUGINS.md."
-                        color: Theme.faint
-                        font.pixelSize: 10
-                        wrapMode: Text.Wrap
-                    }
-                }
-            }
-
-            // ---- behaviour ----
-            Section { text: "Behaviour" }
-
-            Card {
-                Toggle {
-                    Layout.fillWidth: true
-                    text: "Open for permission requests"
-                    checked: App.cfg.autoOpenOnPermission
-                    onToggled: on => App.setCfg({ autoOpenOnPermission: on })
-                }
-                Toggle {
-                    Layout.fillWidth: true
-                    text: "Celebrate when a session finishes"
-                    checked: App.cfg.celebrate
-                    onToggled: on => App.setCfg({ celebrate: on })
-                }
-                Toggle {
-                    Layout.fillWidth: true
-                    text: "Hide while nothing is running"
-                    hint: "leaves a small nub to hover"
-                    checked: App.cfg.hideWhenIdle
-                    onToggled: on => App.setCfg({ hideWhenIdle: on })
-                }
-                Toggle {
-                    Layout.fillWidth: true
-                    text: "Eyes follow the cursor"
-                    hint: "Hyprland"
-                    checked: App.cfg.trackCursor
-                    onToggled: on => App.setCfg({ trackCursor: on })
-                }
-                Labelled {
-                    text: "Usage warning"
-                    Segmented {
-                        options: [["70%", 70], ["80%", 80], ["90%", 90], ["Off", 101]]
-                        value: App.cfg.limitWarn
-                        onPicked: v => App.setCfg({ limitWarn: v })
-                    }
-                }
             }
 
             RowLayout {
-                Layout.topMargin: 4
+                Layout.topMargin: 2
 
-                Text {
-                    text: "Open config file"
-                    color: cfgHover.hovered ? Theme.text : Theme.dim
-                    font.pixelSize: 11
-                    font.underline: true
-
-                    HoverHandler { id: cfgHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: Qt.openUrlExternally(App.configPath.startsWith("/") ? `file://${App.configPath}` : `file:///${App.configPath.replace(/\\/g, "/")}`) }
+                Link {
+                    text: "plugins folder"
+                    onClicked: win.openPath(App.configPath.replace(/config\.json$/, "plugins"))
+                }
+                Link {
+                    Layout.leftMargin: 12
+                    text: "settings file"
+                    onClicked: win.openPath(App.configPath)
                 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: "Not affiliated with Anthropic"
+                    text: "not affiliated with Anthropic"
                     color: Theme.faint
                     font.pixelSize: 10
                 }
@@ -450,7 +377,24 @@ Rectangle {
         }
     }
 
+    function openPath(p) {
+        Qt.openUrlExternally(p.startsWith("/") ? `file://${p}` : `file:///${p.replace(/\\/g, "/")}`);
+    }
+
     // ================================================================ parts
+
+    component Link: Text {
+        id: link
+
+        signal clicked
+
+        color: lh.hovered ? Theme.text : Theme.dim
+        font.pixelSize: 11
+        font.underline: lh.hovered
+
+        HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: link.clicked() }
+    }
 
     component Section: Text {
         Layout.topMargin: 6
