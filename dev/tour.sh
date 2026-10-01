@@ -1,10 +1,10 @@
 #!/bin/sh
-# Restart perch, walk it through every view with fake events, and stitch the
+# Restart emba, walk it through every view with fake events, and stitch the
 # screenshots into dev/tour.png.
 cd "$(dirname "$0")/.."
 geo=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\(.x + .width - 500),\(.y) 500x400"')
 grab() { sleep "${2:-1.1}"; grim -g "$geo" "dev/t-$1.png"; }
-ipc() { qs -p . ipc call perch "$@" > /dev/null; }
+ipc() { qs -p . ipc call emba "$@" > /dev/null; }
 
 sh dev/run.sh
 qs -p dev/backdrop.qml > /dev/null 2>&1 &

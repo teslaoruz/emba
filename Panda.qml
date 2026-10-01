@@ -1,6 +1,7 @@
 import QtQuick
+import qs
 
-// Maple, perch's mascot: a little red-panda mochi drawn on a Canvas every frame.
+// Emba, the red panda: a little mochi-shaped creature drawn on a Canvas every frame.
 //
 // Set `mood` (what the session is doing) and optionally fire an emote; the
 // frame loop below eases every pose value toward that mood's target, so any
@@ -10,10 +11,10 @@ Item {
 
     // idle working thinking waiting question done error sleeping limit
     property string mood: "idle"
-    // body colour; everything else is fixed so Maple always reads as Maple
+    // body colour; everything else is fixed so Emba always reads as Emba
     property color bodyColor: "#e2683c"
     property bool running: visible
-    // gaze target in pixels relative to Maple's centre; null = wander
+    // gaze target in pixels relative to Emba's centre; null = wander
     property var gaze: null
 
     signal clicked
@@ -87,14 +88,14 @@ Item {
 
     readonly property var moodColours: ({
             idle: "#00000000",
-            working: "#3b9eff",
-            thinking: "#8b5cf6",
-            waiting: "#f5a524",
+            working: Theme.working,
+            thinking: Theme.thinking,
+            waiting: Theme.warn,
             question: "#22d3ee",
-            done: "#34d399",
-            error: "#f4505e",
-            sleeping: "#94a3b8",
-            limit: "#fb923c"
+            done: Theme.ok,
+            error: Theme.error,
+            sleeping: Theme.dim,
+            limit: Theme.limit
         })
 
     function approach(cur, target, rate, dt) {
@@ -363,7 +364,7 @@ Item {
         }
     }
 
-    // a cursor resting on Maple for a while earns hearts
+    // a cursor resting on Emba for a while earns hearts
     Timer {
         id: dwell
 
@@ -430,7 +431,7 @@ Item {
             c.fill();
         }
 
-        // ground shadow stays put while Maple hops
+        // ground shadow stays put while Emba hops
         c.fillStyle = "rgba(0,0,0,0.2)";
         const lift = Math.max(0, -p.bob) / 20;
         ellipse(c, 0, 38, 26 * (1 - lift * 0.4), 3.2 * (1 - lift * 0.4));

@@ -4,20 +4,20 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Everything perch knows: config, live Claude Code sessions, open permission
-// requests and usage limits. hook/perch-hook feeds it over a Unix socket.
+// Everything emba knows: config, live Claude Code sessions, open permission
+// requests and usage limits. hook/emba-hook feeds it over a Unix socket.
 Singleton {
     id: root
 
     // ---------------------------------------------------------------- config
-    readonly property string configPath: `${Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"}/perch/config.json`
+    readonly property string configPath: `${Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"}/emba/config.json`
     readonly property var defaults: ({
             position: "top-right",   // top-left top top-right left right bottom-left bottom bottom-right
             marginX: 12,
             marginY: 8,
             screen: "",              // output name, "" = first screen
             scale: 1,
-            color: "#e2683c",        // Maple's fur
+            color: "#e2683c",        // Emba's fur
             hideWhenIdle: true,      // only a small nub while nothing runs
             autoOpenOnPermission: true,
             celebrate: true,         // pop open when a session finishes
@@ -25,24 +25,95 @@ Singleton {
             trackCursor: true,       // eyes follow the cursor everywhere (Hyprland)
             limitWarn: 80,           // % of a usage window that triggers a warning
             askModel: "",            // claude -p --model, "" = your default
-            focusCommand: []         // argv; {window} {pid} {cwd} are filled in
+            focusCommand: [],        // argv; {window} {pid} {cwd} are filled in
+            theme: "auto"            // auto caelestia pywal custom default
         })
     property var cfg: defaults
+    // what the user actually wrote, so saving keeps keys we do not know
+    property var userCfg: ({})
 
     FileView {
+        id: configFile
+
+        printErrors: false
         path: root.configPath
         watchChanges: true
+        atomicWrites: true
         onFileChanged: reload()
         onLoaded: {
             try {
-                root.cfg = Object.assign({}, root.defaults, JSON.parse(text()));
+                root.userCfg = JSON.parse(text());
+                root.cfg = Object.assign({}, root.defaults, root.userCfg);
             } catch (e) {
-                console.warn(`perch: ignoring ${root.configPath}: ${e}`);
+                console.warn(`emba: ignoring ${root.configPath}: ${e}`);
                 root.cfg = root.defaults;
             }
         }
         onLoadFailed: root.cfg = root.defaults
     }
+
+    // Change settings: merged into the user's file and written back. The
+    // watcher above then reloads it, so the whole app follows.
+    function setCfg(patch) {
+        const next = Object.assign({}, userCfg, patch);
+        userCfg = next;
+        cfg = Object.assign({}, defaults, next);
+        mkdirProc.text = JSON.stringify(next, null, 2) + "\n";
+        mkdirProc.running = true;
+    }
+
+    Process {
+        id: mkdirProc
+
+        property string text
+
+        command: ["mkdir", "-p", root.configPath.replace(/\/[^/]*$/, "")]
+        onExited: configFile.setText(text)
+    }
+
+    // ------------------------------------------------------------ app control
+    // `bin/emba` does the real work (hooks, autostart); settings call it.
+    readonly property string emba: `${Quickshell.shellDir}/bin/emba`
+    property var status: ({})
+    property bool busy: false
+    property bool settingsOpen: false
+
+    function refreshStatus() {
+        if (!statusProc.running)
+            statusProc.running = true;
+    }
+
+    function run(args) {
+        if (busy)
+            return;
+        busy = true;
+        actionProc.command = ["sh", emba].concat(args);
+        actionProc.running = true;
+    }
+
+    Process {
+        id: statusProc
+
+        command: ["sh", root.emba, "status", "--json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.status = JSON.parse(text);
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: actionProc
+
+        onExited: {
+            root.busy = false;
+            root.refreshStatus();
+        }
+    }
+
+    Component.onCompleted: refreshStatus()
 
     // -------------------------------------------------------------- sessions
     // sid -> { sid, name, cwd, state, ts, pid, win, ticker: [...], text }
@@ -58,11 +129,11 @@ Singleton {
     signal limitWarning(string window, int percent)
 
     readonly property var stateColours: ({
-            idle: "#8b9099",
-            thinking: "#8b5cf6",
-            working: "#3b9eff",
-            waiting: "#f5a524",
-            done: "#34d399"
+            idle: Theme.dim,
+            thinking: Theme.thinking,
+            working: Theme.working,
+            waiting: Theme.warn,
+            done: Theme.ok
         })
 
     function publish() {
@@ -209,7 +280,7 @@ Singleton {
 
     SocketServer {
         active: true
-        path: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/perch.sock`
+        path: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
 
         handler: Socket {
             id: conn
@@ -334,10 +405,27 @@ Singleton {
     signal askRequested
 
     IpcHandler {
-        target: "perch"
+        target: "emba"
 
         function toggle(): void {
             root.toggleRequested();
+        }
+        function settings(): void {
+            root.settingsOpen = true;
+            root.refreshStatus();
+        }
+        // emba set position top-left · emba set scale 1.2 · emba set celebrate false
+        function set(key: string, value: string): string {
+            if (!(key in root.defaults))
+                return `unknown setting: ${key}`;
+            let v = value;
+            try {
+                v = JSON.parse(value);
+            } catch (e) {}
+            root.setCfg({
+                [key]: v
+            });
+            return "ok";
         }
         function ask(): void {
             root.askRequested();

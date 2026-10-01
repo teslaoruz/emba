@@ -1,5 +1,5 @@
 #!/bin/sh
-# (Re)start perch from this checkout; log in dev/run.log.
+# (Re)start emba from this checkout; log in dev/run.log.
 #   dev/run.sh          restart
 #   dev/run.sh stop     stop
 #   dev/run.sh shot     screenshot the island's corner to dev/island.png

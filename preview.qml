@@ -1,4 +1,4 @@
-// Contact sheet of Maple's moods and emotes: qs -p preview.qml
+// Contact sheet of Emba's moods and emotes: qs -p preview.qml
 import QtQuick
 import Quickshell
 
@@ -25,7 +25,7 @@ PanelWindow {
             Column {
                 required property string modelData
 
-                Maple {
+                Panda {
                     width: 130
                     height: 130
                     mood: ["love", "dizzy"].includes(modelData) ? "idle" : modelData

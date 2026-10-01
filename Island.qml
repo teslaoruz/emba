@@ -9,8 +9,8 @@ import qs
 // The island: a dark rounded shape that grows out of its corner of the screen.
 //
 //   hidden    a small nub; nothing is running
-//   peek      cursor touched the nub: Maple pops out and waves
-//   compact   a pill while sessions run: Maple, the latest action, a dot per session
+//   peek      cursor touched the nub: Emba pops out and waves
+//   compact   a pill while sessions run: Emba, the latest action, a dot per session
 //   expanded  a card with one of the views below
 //
 // Laid out in unscaled units inside `stage`, which is scaled by `s`.
@@ -33,11 +33,11 @@ Item {
     property var files: []
     property bool dragging: false
 
-    readonly property var sessions: Perch.sessions
-    readonly property var pending: Perch.pending
+    readonly property var sessions: App.sessions
+    readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
 
-    readonly property string mode: open ? "expanded" : peeking ? "peek" : (sessions.length || dragging || !Perch.cfg.hideWhenIdle) ? "compact" : "hidden"
+    readonly property string mode: open ? "expanded" : peeking ? "peek" : (sessions.length || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -48,7 +48,7 @@ Item {
         return sessions.length ? "overview" : "empty";
     }
     // views that stay open after the cursor leaves
-    readonly property bool sticky: ["approval", "ask", "result", "file", "drop"].includes(view) || Perch.asking
+    readonly property bool sticky: ["approval", "ask", "result", "file", "drop"].includes(view) || App.asking
 
     function expand(v) {
         forcedView = v ?? "";
@@ -63,15 +63,15 @@ Item {
     }
 
     Connections {
-        target: Perch
+        target: App
 
         function onPermissionAsked() {
-            maple.surprise();
-            if (Perch.cfg.autoOpenOnPermission)
+            panda.surprise();
+            if (App.cfg.autoOpenOnPermission)
                 root.expand(root.forcedView === "ask" ? "ask" : "");
         }
         function onFinished(sid) {
-            if (!Perch.cfg.celebrate || (root.open && root.view !== "overview"))
+            if (!App.cfg.celebrate || (root.open && root.view !== "overview"))
                 return;
             root.finishedSid = sid;
             root.expand("finished");
@@ -79,7 +79,7 @@ Item {
                 autoClose.restart();
         }
         function onLimitWarning(window, percent) {
-            maple.emote("surprised", 1);
+            panda.emote("surprised", 1);
             if (!root.open || root.view === "overview") {
                 root.expand("limit");
                 autoClose.restart();
@@ -114,18 +114,18 @@ Item {
     Timer {
         id: leaveTimer
 
-        interval: Perch.cfg.collapseDelay ?? 1200
+        interval: App.cfg.collapseDelay ?? 1200
         onTriggered: if (!root.sticky)
             root.collapse()
     }
 
-    // ---- mood: what Maple shows ----
+    // ---- mood: what Emba shows ----
     readonly property string mood: {
         if (dragging)
             return "idle";
         if (pending.length)
             return "waiting";
-        if (Perch.asking)
+        if (App.asking)
             return "thinking";
         if (open && view === "finished")
             return "done";
@@ -133,8 +133,8 @@ Item {
             return "limit";
         const s = focusSession;
         if (!s)
-            return Date.now() - Perch.lastActivity > 600000 && mode !== "hidden" ? "sleeping" : "idle";
-        if (s.state === "idle" && Math.max(Perch.limits.five_hour?.used ?? 0, Perch.limits.seven_day?.used ?? 0) >= Perch.cfg.limitWarn)
+            return Date.now() - App.lastActivity > 600000 && mode !== "hidden" ? "sleeping" : "idle";
+        if (s.state === "idle" && Math.max(App.limits.five_hour?.used ?? 0, App.limits.seven_day?.used ?? 0) >= App.cfg.limitWarn)
             return "limit";
         return {
             thinking: "thinking",
@@ -172,9 +172,9 @@ Item {
             x: (stage.width - width) * root.hAlign
             y: (stage.height - height) * root.vAlign
             radius: root.mode === "expanded" ? 26 : Math.min(height / 2, 24)
-            color: Qt.rgba(0.05, 0.05, 0.06, root.mode === "hidden" ? 0.75 : 0.96)
+            color: Qt.alpha(Theme.base, root.mode === "hidden" ? 0.75 : 0.96)
             border.width: 1
-            border.color: Qt.rgba(1, 1, 1, root.mode === "hidden" ? 0.12 : 0.07)
+            border.color: Qt.alpha(Theme.text, root.mode === "hidden" ? 0.12 : 0.07)
             clip: true
 
             Behavior on width { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.1 } }
@@ -188,7 +188,7 @@ Item {
                 radius: parent.radius
                 color: "transparent"
                 border.width: 2
-                border.color: "#f5a524"
+                border.color: Theme.warn
                 opacity: root.pending.length && root.mode !== "expanded" ? pulse.value : 0
 
                 QtObject {
@@ -215,7 +215,7 @@ Item {
                         autoClose.stop();
                         if (root.mode === "hidden") {
                             root.peeking = true;
-                            maple.wave();
+                            panda.wave();
                             openTimer.interval = 650;
                             openTimer.restart();
                         } else if (root.mode === "compact") {
@@ -242,11 +242,11 @@ Item {
                 anchors.fill: parent
                 onEntered: drag => {
                     root.dragging = true;
-                    maple.emote("surprised", 30);
+                    panda.emote("surprised", 30);
                 }
                 onExited: {
                     root.dragging = false;
-                    maple.emote("", 0);
+                    panda.emote("", 0);
                 }
                 onDropped: drop => {
                     root.dragging = false;
@@ -254,14 +254,14 @@ Item {
                     if (!paths.length)
                         return;
                     root.files = paths;
-                    maple.gulp();
+                    panda.gulp();
                     root.expand("file");
                 }
             }
 
-            // ---- Maple, one instance travelling between modes ----
-            Maple {
-                id: maple
+            // ---- Emba, one instance travelling between modes ----
+            Panda {
+                id: panda
 
                 property real px: root.mode === "expanded" ? 96 : root.mode === "peek" ? 70 : root.mode === "compact" ? 46 : 20
 
@@ -272,7 +272,7 @@ Item {
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
                 mood: root.mood
-                bodyColor: Perch.cfg.color
+                bodyColor: App.cfg.color
 
                 Behavior on px { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
                 Behavior on x { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
@@ -300,8 +300,8 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, 190)
                     elide: Text.ElideRight
-                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Maple" : root.focusSession ? (root.focusSession.ticker.slice(-1)[0] ?? root.focusSession.name) : ""
-                    color: root.pending.length ? "#f5a524" : "#e8e9ec"
+                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.focusSession ? (root.focusSession.ticker.slice(-1)[0] ?? root.focusSession.name) : ""
+                    color: root.pending.length ? Theme.warn : Theme.text
                     font.pixelSize: 12
                     font.weight: Font.Medium
                 }
@@ -319,7 +319,7 @@ Item {
                             width: 6
                             height: 6
                             radius: 3
-                            color: Perch.stateColours[modelData.state] ?? "#8b9099"
+                            color: App.stateColours[modelData.state] ?? Theme.dim
                         }
                     }
                 }
@@ -344,7 +344,7 @@ Item {
                         result: resultView,
                         file: fileView,
                         drop: dropView
-                    })[Perch.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
+                    })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
 
                 Behavior on opacity {
                     SequentialAnimation {
@@ -361,11 +361,28 @@ Item {
                 anchors.top: parent.top
                 anchors.margins: 12
                 text: "✕"
-                color: closeHover.hovered ? "#e8e9ec" : "#5f646d"
+                color: closeHover.hovered ? Theme.text : Theme.faint
                 font.pixelSize: 12
 
                 HoverHandler { id: closeHover }
                 TapHandler { onTapped: root.collapse() }
+            }
+            Text {
+                visible: root.mode === "expanded" && root.view !== "approval"
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 12
+                text: "⚙"
+                color: gearHover.hovered ? Theme.text : Theme.faint
+                font.pixelSize: 13
+
+                HoverHandler { id: gearHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: {
+                        App.settingsOpen = true;
+                        App.refreshStatus();
+                    }
+                }
             }
 
             Keys.onPressed: event => {
@@ -386,11 +403,11 @@ Item {
         const req = pending[0];
         if (!req)
             return;
-        Perch.decide(req.id, behavior, always);
+        App.decide(req.id, behavior, always);
         if (behavior === "allow")
-            maple.emote("happy", 1);
+            panda.emote("happy", 1);
         else
-            maple.emote("annoyed", 0.8);
+            panda.emote("annoyed", 0.8);
         if (pending.length === 0 && !hover.hovered)
             leaveTimer.restart();
     }
@@ -403,14 +420,14 @@ Item {
     }
 
     Process {
-        running: (Perch.cfg.trackCursor ?? true) && root.mode !== "hidden" && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
+        running: (App.cfg.trackCursor ?? true) && root.mode !== "hidden" && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
         command: ["sh", "-c", "while hyprctl cursorpos; do sleep 0.08; done"]
         stdout: SplitParser {
             onRead: line => {
                 const m = line.match(/(-?\d+),\s*(-?\d+)/);
                 if (!m)
                     return;
-                const c = maple.mapToItem(null, maple.width / 2, maple.height / 2);
+                const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
                 cursor.gaze = Qt.point(+m[1] - root.origin.x - c.x * root.s, +m[2] - root.origin.y - c.y * root.s);
             }
         }
@@ -421,13 +438,13 @@ Item {
     // ================================================================ views
 
     component Label: Text {
-        color: "#e8e9ec"
+        color: Theme.text
         font.pixelSize: 13
         wrapMode: Text.Wrap
     }
 
     component Dim: Text {
-        color: "#8b9099"
+        color: Theme.dim
         font.pixelSize: 12
         elide: Text.ElideRight
     }
@@ -443,7 +460,7 @@ Item {
         implicitWidth: row.implicitWidth + 24
         implicitHeight: 30
         radius: 15
-        color: primary ? (ph.hovered ? "#ffffff" : "#f5f6f8") : Qt.rgba(1, 1, 1, ph.hovered ? 0.15 : 0.09)
+        color: primary ? (ph.hovered ? Qt.lighter(Theme.primary, 1.08) : Theme.primary) : Qt.alpha(Theme.text, ph.hovered ? 0.15 : 0.09)
         scale: tap.pressed ? 0.94 : 1
 
         Behavior on scale { NumberAnimation { duration: 90 } }
@@ -458,7 +475,7 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: pill.text
-                color: pill.primary ? "#0b0c0e" : "#e8e9ec"
+                color: pill.primary ? Theme.onPrimary : Theme.text
                 font.pixelSize: 13
                 font.weight: Font.Medium
             }
@@ -470,12 +487,12 @@ Item {
                 radius: 4
                 color: "transparent"
                 border.width: 1
-                border.color: pill.primary ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(1, 1, 1, 0.25)
+                border.color: pill.primary ? Qt.alpha(Theme.onPrimary, 0.25) : Qt.alpha(Theme.text, 0.25)
 
                 Text {
                     anchors.centerIn: parent
                     text: pill.key
-                    color: pill.primary ? "#0b0c0e" : "#c0c4cc"
+                    color: pill.primary ? Theme.onPrimary : Theme.dim
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
                 }
@@ -489,7 +506,7 @@ Item {
     component Header: RowLayout {
         property string title
         property string sub
-        property color dot: "#8b9099"
+        property color dot: Theme.dim
 
         spacing: 6
 
@@ -501,7 +518,7 @@ Item {
         }
         Text {
             text: parent.title
-            color: "#e8e9ec"
+            color: Theme.text
             font.pixelSize: 13
             font.weight: Font.DemiBold
         }
@@ -522,7 +539,7 @@ Item {
                 Layout.rightMargin: 18
                 title: root.sessions.length === 1 ? "1 session" : `${root.sessions.length} sessions`
                 sub: {
-                    const l = Perch.limits;
+                    const l = App.limits;
                     const parts = [];
                     if (l.five_hour)
                         parts.push(`5h ${l.five_hour.used}%`);
@@ -530,7 +547,7 @@ Item {
                         parts.push(`7d ${l.seven_day.used}%`);
                     return parts.join(" · ");
                 }
-                dot: "#34d399"
+                dot: Theme.ok
             }
 
             Repeater {
@@ -544,10 +561,10 @@ Item {
                     Layout.fillWidth: true
                     implicitHeight: 40
                     radius: 12
-                    color: Qt.rgba(1, 1, 1, rh.hovered ? 0.08 : 0.04)
+                    color: Qt.alpha(Theme.text, rh.hovered ? 0.08 : 0.04)
 
                     HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: Perch.focus(srow.modelData.sid) }
+                    TapHandler { onTapped: App.focus(srow.modelData.sid) }
 
                     Rectangle {
                         x: 10
@@ -555,7 +572,7 @@ Item {
                         width: 8
                         height: 8
                         radius: 4
-                        color: Perch.stateColours[srow.modelData.state] ?? "#8b9099"
+                        color: App.stateColours[srow.modelData.state] ?? Theme.dim
 
                         SequentialAnimation on opacity {
                             running: ["working", "thinking", "waiting"].includes(srow.modelData.state)
@@ -574,7 +591,7 @@ Item {
                         Text {
                             width: parent.width
                             text: srow.modelData.name
-                            color: "#e8e9ec"
+                            color: Theme.text
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
@@ -613,21 +630,38 @@ Item {
         id: emptyView
 
         ColumnLayout {
+            id: empty
+
+            // first run: offer to connect before anything else
+            readonly property bool connected: App.status.hooks !== false
+
             spacing: 10
 
             Label {
                 Layout.fillWidth: true
                 Layout.topMargin: 8
-                text: "Nothing running right now."
+                text: empty.connected ? "Nothing running right now." : "Hi, I'm Emba!"
                 font.pixelSize: 14
             }
             Dim {
-                text: "Start claude in a terminal, or ask here."
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: empty.connected ? "Start claude in a terminal, or ask here." : "Connect me to Claude Code and I'll watch your sessions and ask before anything runs."
             }
-            Pill {
-                text: "Ask Claude"
-                primary: true
-                onClicked: root.expand("ask")
+            Row {
+                spacing: 6
+
+                Pill {
+                    visible: !empty.connected
+                    text: App.busy ? "Connecting…" : "Connect"
+                    primary: true
+                    onClicked: App.run(["connect"])
+                }
+                Pill {
+                    text: "Ask Claude"
+                    primary: empty.connected
+                    onClicked: root.expand("ask")
+                }
             }
         }
     }
@@ -647,14 +681,14 @@ Item {
                     Layout.fillWidth: true
                     title: root.pending[0]?.name ?? ""
                     sub: root.pending.length > 1 ? `wants to use ${root.pending[0]?.tool} · 1 of ${root.pending.length}` : `wants to use ${root.pending[0]?.tool}`
-                    dot: "#f5a524"
+                    dot: Theme.warn
                 }
                 Dim {
                     text: "terminal ↗"
-                    color: th.hovered ? "#e8e9ec" : "#8b9099"
+                    color: th.hovered ? Theme.text : Theme.dim
 
                     HoverHandler { id: th; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: Perch.focus(root.pending[0]?.sid ?? "") }
+                    TapHandler { onTapped: App.focus(root.pending[0]?.sid ?? "") }
                 }
             }
 
@@ -662,9 +696,9 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: Math.min(code.implicitHeight, 110) + 18
                 radius: 12
-                color: "#16171b"
+                color: Theme.surface
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.05)
+                border.color: Qt.alpha(Theme.text, 0.05)
                 clip: true
 
                 Text {
@@ -674,7 +708,7 @@ Item {
                     y: 9
                     width: parent.width - 20
                     text: root.pending[0]?.full ?? ""
-                    color: "#e8e9ec"
+                    color: Theme.text
                     font.family: "monospace"
                     font.pixelSize: 12
                     wrapMode: Text.WrapAnywhere
@@ -716,7 +750,7 @@ Item {
         id: finishedView
 
         ColumnLayout {
-            readonly property var sess: Perch.map[root.finishedSid]
+            readonly property var sess: App.map[root.finishedSid]
 
             spacing: 8
 
@@ -725,12 +759,12 @@ Item {
                 Layout.rightMargin: 18
                 title: parent.sess?.name ?? "Claude"
                 sub: "is done"
-                dot: "#34d399"
+                dot: Theme.ok
             }
             Label {
                 Layout.fillWidth: true
                 text: parent.sess?.text || "Finished."
-                color: "#c0c4cc"
+                color: Theme.dim
                 font.pixelSize: 12
                 maximumLineCount: 4
                 elide: Text.ElideRight
@@ -741,7 +775,7 @@ Item {
                 Pill {
                     text: "Show terminal"
                     onClicked: {
-                        Perch.focus(root.finishedSid);
+                        App.focus(root.finishedSid);
                         root.collapse();
                     }
                 }
@@ -758,8 +792,8 @@ Item {
         id: limitView
 
         ColumnLayout {
-            readonly property var five: Perch.limits.five_hour
-            readonly property var week: Perch.limits.seven_day
+            readonly property var five: App.limits.five_hour
+            readonly property var week: App.limits.seven_day
 
             spacing: 8
 
@@ -767,7 +801,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
                 title: "Usage is getting high"
-                dot: "#fb923c"
+                dot: Theme.limit
             }
             Repeater {
                 model: [["5-hour window", parent.five], ["This week", parent.week]].filter(x => x[1])
@@ -782,7 +816,7 @@ Item {
                         Dim { text: modelData[0]; Layout.fillWidth: true }
                         Text {
                             text: `${modelData[1].used}%`
-                            color: modelData[1].used >= 90 ? "#f4505e" : modelData[1].used >= Perch.cfg.limitWarn ? "#fb923c" : "#e8e9ec"
+                            color: modelData[1].used >= 90 ? Theme.error : modelData[1].used >= App.cfg.limitWarn ? Theme.limit : Theme.text
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                         }
@@ -791,13 +825,13 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: 5
                         radius: 3
-                        color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Qt.alpha(Theme.text, 0.08)
 
                         Rectangle {
                             width: parent.width * Math.min(1, modelData[1].used / 100)
                             height: parent.height
                             radius: 3
-                            color: modelData[1].used >= 90 ? "#f4505e" : "#fb923c"
+                            color: modelData[1].used >= 90 ? Theme.error : Theme.limit
                         }
                     }
                     Dim {
@@ -820,7 +854,7 @@ Item {
                 Layout.rightMargin: 18
                 title: "Ask Claude"
                 sub: "runs claude -p on your plan"
-                dot: "#8b5cf6"
+                dot: Theme.thinking
             }
 
             Flow {
@@ -837,7 +871,7 @@ Item {
                         width: Math.min(fname.implicitWidth + 16, 200)
                         height: 22
                         radius: 11
-                        color: Qt.rgba(1, 1, 1, 0.08)
+                        color: Qt.alpha(Theme.text, 0.08)
 
                         Text {
                             id: fname
@@ -845,7 +879,7 @@ Item {
                             anchors.centerIn: parent
                             width: Math.min(implicitWidth, 184)
                             text: modelData.split("/").pop()
-                            color: "#c0c4cc"
+                            color: Theme.dim
                             font.pixelSize: 11
                             elide: Text.ElideMiddle
                         }
@@ -857,9 +891,9 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: 38
                 radius: 19
-                color: "#16171b"
+                color: Theme.surface
                 border.width: 1
-                border.color: input.activeFocus ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.06)
+                border.color: input.activeFocus ? Qt.alpha(Theme.text, 0.18) : Qt.alpha(Theme.text, 0.06)
 
                 TextInput {
                     id: input
@@ -868,13 +902,13 @@ Item {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 14
                     verticalAlignment: TextInput.AlignVCenter
-                    color: "#e8e9ec"
+                    color: Theme.text
                     font.pixelSize: 13
                     clip: true
                     focus: true
                     Component.onCompleted: forceActiveFocus()
                     onAccepted: {
-                        Perch.ask(text, root.files);
+                        App.ask(text, root.files);
                         root.forcedView = "result";
                     }
                     Keys.onEscapePressed: root.collapse()
@@ -883,7 +917,7 @@ Item {
                         visible: !input.text
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.files.length ? "What about it?" : "Ask anything…"
-                        color: "#5f646d"
+                        color: Theme.faint
                         font.pixelSize: 13
                     }
                 }
@@ -904,9 +938,9 @@ Item {
             Header {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
-                title: Perch.asking ? "Claude is thinking…" : Perch.askError ? "Something went wrong" : "Claude says"
-                dot: Perch.askError ? "#f4505e" : "#8b5cf6"
-                opacity: Perch.asking ? shimmer2.value : 1
+                title: App.asking ? "Claude is thinking…" : App.askError ? "Something went wrong" : "Claude says"
+                dot: App.askError ? Theme.error : Theme.thinking
+                opacity: App.asking ? shimmer2.value : 1
 
                 QtObject {
                     id: shimmer2
@@ -915,7 +949,7 @@ Item {
 
                     SequentialAnimation on value {
                         loops: Animation.Infinite
-                        running: Perch.asking
+                        running: App.asking
                         NumberAnimation { to: 0.4; duration: 800 }
                         NumberAnimation { to: 1; duration: 800 }
                     }
@@ -927,7 +961,7 @@ Item {
                 implicitHeight: Math.min(answer.implicitHeight, 200)
                 contentHeight: answer.implicitHeight
                 clip: true
-                visible: !Perch.asking
+                visible: !App.asking
 
                 TextEdit {
                     id: answer
@@ -936,8 +970,8 @@ Item {
                     readOnly: true
                     selectByMouse: true
                     wrapMode: TextEdit.Wrap
-                    text: Perch.askError || Perch.answer
-                    color: Perch.askError ? "#ff8d97" : "#d6d9de"
+                    text: App.askError || App.answer
+                    color: App.askError ? Theme.error : Theme.text
                     font.pixelSize: 13
                     textFormat: TextEdit.MarkdownText
                 }
@@ -945,11 +979,11 @@ Item {
 
             RowLayout {
                 spacing: 6
-                visible: !Perch.asking
+                visible: !App.asking
 
                 Pill {
                     text: "Copy"
-                    onClicked: Quickshell.execDetached(["wl-copy", Perch.answer])
+                    onClicked: Quickshell.execDetached(["wl-copy", App.answer])
                 }
                 Pill {
                     text: "Ask again"
@@ -962,9 +996,9 @@ Item {
                 }
             }
             Pill {
-                visible: Perch.asking
+                visible: App.asking
                 text: "Stop"
-                onClicked: Perch.cancelAsk()
+                onClicked: App.cancelAsk()
             }
         }
     }
@@ -979,8 +1013,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
                 title: root.files.length === 1 ? root.files[0].split("/").pop() : `${root.files.length} files`
-                sub: "Maple has it"
-                dot: "#34d399"
+                sub: "Emba has it"
+                dot: Theme.ok
             }
             RowLayout {
                 spacing: 6
@@ -1007,14 +1041,14 @@ Item {
         Rectangle {
             implicitHeight: 96
             radius: 16
-            color: Qt.rgba(0.2, 0.83, 0.6, 0.08)
+            color: Qt.alpha(Theme.ok, 0.08)
             border.width: 1.5
-            border.color: "#34d399"
+            border.color: Theme.ok
 
             Label {
                 anchors.centerIn: parent
                 text: "Drop it here"
-                color: "#a7f3d0"
+                color: Theme.ok
             }
         }
     }

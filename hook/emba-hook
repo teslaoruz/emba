@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Claude Code hook for perch. Standard library only.
+"""Claude Code hook for emba. Standard library only.
 
-Forwards each hook event to perch over a Unix socket. For PermissionRequest it
-stays connected and waits for perch to answer.
+Forwards each hook event to emba over a Unix socket. For PermissionRequest it
+stays connected and waits for emba to answer.
 
-perch not running, slow, or gone -> exit 0 with no output, and Claude Code
+emba not running, slow, or gone -> exit 0 with no output, and Claude Code
 carries on exactly as if this hook did not exist. A hook that prints nothing
 never decides a permission, so every failure here falls back to the normal
 terminal prompt.
 
-    perch-hook                      as a hook: payload on stdin
-    perch-hook statusline [CMD]     as the statusLine: forwards the rate limits,
+    emba-hook                      as a hook: payload on stdin
+    emba-hook statusline [CMD]     as the statusLine: forwards the rate limits,
                                     then runs CMD (your old statusline) with the
                                     same stdin and prints what it prints
 """
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "perch.sock"
+SOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "emba.sock"
 CONNECT_TIMEOUT = 0.3
 DECISION_TIMEOUT = 570  # Claude Code kills PermissionRequest hooks at 600 s
 
@@ -35,7 +35,7 @@ def connect():
 
 
 def send(msg, wait=False):
-    """Send one JSON line; with wait, return perch's one-line JSON reply."""
+    """Send one JSON line; with wait, return emba's one-line JSON reply."""
     try:
         s = connect()
     except OSError:
@@ -50,7 +50,7 @@ def send(msg, wait=False):
             while not buf.endswith(b"\n"):
                 chunk = s.recv(4096)
                 if not chunk:
-                    return None  # perch closed on us: answered elsewhere
+                    return None  # emba closed on us: answered elsewhere
                 buf += chunk
                 if len(buf) > 65536:
                     return None
@@ -166,7 +166,7 @@ def main():
             return
         decision = {"behavior": reply["behavior"]}
         if reply["behavior"] == "deny":
-            decision["message"] = "Denied from perch."
+            decision["message"] = "Denied from emba."
         elif reply.get("always") and suggestions:
             decision["updatedPermissions"] = suggestions
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))

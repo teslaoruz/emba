@@ -1,7 +1,7 @@
-"""Send fake hook events to a running perch, for looking at it without Claude.
+"""Send fake hook events to a running emba, for looking at it without Claude.
 
     python3 dev/fake.py start          two sessions, one working, one thinking
-    python3 dev/fake.py ask            a permission request; prints perch's answer
+    python3 dev/fake.py ask            a permission request; prints emba's answer
     python3 dev/fake.py done           first session finishes
     python3 dev/fake.py limit 85       usage at 85 %
     python3 dev/fake.py end            both sessions end
@@ -11,7 +11,7 @@ import os
 import socket
 import sys
 
-SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "perch.sock")
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "emba.sock")
 A = {"sid": "fake-a", "cwd": "/home/you/code/invoices", "pid": 1}
 B = {"sid": "fake-b", "cwd": "/home/you/notes", "pid": 1}
 

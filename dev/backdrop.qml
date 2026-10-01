@@ -1,4 +1,4 @@
-// Plain backdrop under the island's corner, so README screenshots show perch
+// Plain backdrop under the island's corner, so README screenshots show emba
 // and not whatever is on the desktop: qs -p dev/backdrop.qml
 import QtQuick
 import Quickshell

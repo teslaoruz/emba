@@ -1,13 +1,13 @@
-# perch
+# emba
 
-A small red panda named **Maple** sits on the edge of your screen and watches
+A small red panda named **Emba** sits on the edge of your screen and watches
 your [Claude Code](https://code.claude.com) sessions. Answer permission prompts
 without going back to the terminal, see what each session is doing, and get a
 little cheer when one finishes.
 
 For Linux Wayland desktops, built on [Quickshell](https://quickshell.org).
 
-![Maple's moods](docs/maple.png)
+![Emba's moods](docs/maple.png)
 ![The island's views](docs/views.png)
 
 ## What it does
@@ -20,25 +20,25 @@ For Linux Wayland desktops, built on [Quickshell](https://quickshell.org).
   `Bash npm test`) and a dot per session. Hover for the full list; click a
   session to jump to its terminal (Hyprland out of the box, anything else with
   `focusCommand`).
-- **Know when it's done.** Maple flips, sparkles and shows Claude's last reply.
-- **Usage warnings.** With `--statusline`, Maple starts sweating at 80% of your
+- **Know when it's done.** Emba flips, sparkles and shows Claude's last reply.
+- **Usage warnings.** With `--statusline`, Emba starts sweating at 80% of your
   5-hour or weekly limit and the island shows when it resets.
 - **Ask Claude.** A quick question box that runs `claude -p`, so it uses your
   existing Claude plan; no API key.
-- **Feed Maple files.** Drop files on the island, then ask about them or copy
+- **Feed Emba files.** Drop files on the island, then ask about them or copy
   their paths.
 
-Maple's moods: idle, thinking, working, waiting on you, done, sleeping, and
+Emba's moods: idle, thinking, working, waiting on you, done, sleeping, and
 tired when you're near your limit. Her eyes follow your cursor. Rest the cursor
 on her for hearts. Click her and she's annoyed. Click three times fast and
 she's dizzy.
 
 ## Safety
 
-- The hook never blocks Claude Code. perch not running → the hook exits in
+- The hook never blocks Claude Code. emba not running → the hook exits in
   milliseconds and prints nothing.
 - A hook that prints nothing never decides a permission. Every failure
-  (crash, timeout, perch restarted) falls back to the normal terminal prompt;
+  (crash, timeout, emba restarted) falls back to the normal terminal prompt;
   nothing gets approved by accident.
 - Y/N keyboard shortcuts only work after you click the island, so typing in
   your terminal can never approve something by mistake.
@@ -52,25 +52,25 @@ Optional: Hyprland (jump to terminal, cursor-following eyes), `wl-clipboard`
 (copy buttons).
 
 ```sh
-git clone https://github.com/teslaoruz/perch ~/.local/share/perch
-cd ~/.local/share/perch
+git clone https://github.com/teslaoruz/emba ~/.local/share/emba
+cd ~/.local/share/emba
 ./install.sh --statusline --service
 ```
 
-`install.sh` links the config to `~/.config/quickshell/perch` and adds the
+`install.sh` links the config to `~/.config/quickshell/emba` and adds the
 hooks to `~/.claude/settings.json`. It shows you the diff and asks first, keeps
 a dated backup, and only touches its own entries. Restart running Claude Code
 sessions so they pick up the hooks.
 
 - `--statusline` wraps your existing statusline to read the usage limits; its
   output is passed through unchanged.
-- `--service` installs a systemd user service. Without it, run `qs -c perch`
+- `--service` installs a systemd user service. Without it, run `qs -c emba`
   or add that to your compositor's autostart.
 - `./install.sh --uninstall` removes all of it.
 
 ## Configure
 
-Create `~/.config/perch/config.json`; changes apply live. Every key is
+Create `~/.config/emba/config.json`; changes apply live. Every key is
 optional, see [`config.example.json`](config.example.json).
 
 | Key | Default | |
@@ -79,7 +79,7 @@ optional, see [`config.example.json`](config.example.json).
 | `marginX`, `marginY` | `12`, `8` | distance from the screen edge |
 | `screen` | first | output name, e.g. `DP-1` |
 | `scale` | `1` | |
-| `color` | `#e2683c` | Maple's fur |
+| `color` | `#e2683c` | Emba's fur |
 | `hideWhenIdle` | `true` | only a small nub while nothing runs |
 | `autoOpenOnPermission` | `true` | |
 | `celebrate` | `true` | open briefly when a session finishes |
@@ -92,23 +92,23 @@ optional, see [`config.example.json`](config.example.json).
 ## Keybinds
 
 ```sh
-qs -c perch ipc call perch toggle   # open / close
-qs -c perch ipc call perch ask      # open the ask box
-qs -c perch ipc call perch allow    # answer the oldest permission request
-qs -c perch ipc call perch deny
+qs -c emba ipc call emba toggle   # open / close
+qs -c emba ipc call emba ask      # open the ask box
+qs -c emba ipc call emba allow    # answer the oldest permission request
+qs -c emba ipc call emba deny
 ```
 
 ## How it works
 
 ```
-claude ─ hook ─► hook/perch-hook ─ $XDG_RUNTIME_DIR/perch.sock ─► perch (Quickshell)
+claude ─ hook ─► hook/emba-hook ─ $XDG_RUNTIME_DIR/emba.sock ─► emba (Quickshell)
                        ▲                                              │
                        └──────────── allow / deny (PermissionRequest) ┘
 ```
 
-`perch-hook` is one standard-library Python file. On a `PermissionRequest`, it
-keeps the socket open until perch answers. If you answer in the terminal
-instead, the session's next event tells perch to drop the request.
+`emba-hook` is one standard-library Python file. On a `PermissionRequest`, it
+keeps the socket open until emba answers. If you answer in the terminal
+instead, the session's next event tells emba to drop the request.
 
 ## Develop
 
@@ -116,13 +116,13 @@ instead, the session's next event tells perch to drop the request.
 qs -p .                 # run from the checkout
 sh dev/tour.sh          # fake sessions through every view, screenshots in dev/
 sh dev/test_hook.sh     # end-to-end hook checks
-qs -p preview.qml       # all of Maple's moods side by side
+qs -p preview.qml       # all of Emba's moods side by side
 ```
 
 ## Credits
 
 Inspired by [coucou](https://github.com/louis-CFM/coucou) by Louis Raillé,
-a notch companion for Claude Code on macOS. perch is its own code and its own
+a notch companion for Claude Code on macOS. emba is its own code and its own
 character.
 
 Not affiliated with Anthropic. Claude and Claude Code are trademarks of
