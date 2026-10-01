@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/teslaoruz/emba/security/advisories/new
+    about: Please report anything that could approve or run something unintended privately.

@@ -13,5 +13,5 @@ d = ImageDraw.Draw(sheet)
 for i, (p, im) in enumerate(zip(paths, imgs)):
     x, y = (i % cols) * w, (i // cols) * (h + 18)
     sheet.paste(im, (x, y + 18))
-    d.text((x + 6, y + 3), os.path.splitext(os.path.basename(p))[0].split("-", 1)[-1], fill="#ccc")
+    d.text((x + 6, y + 3), os.path.splitext(os.path.basename(p))[0].split("-", 1)[-1].lstrip("0123456789"), fill="#ccc")
 sheet.save(out)

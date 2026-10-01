@@ -1,6 +1,7 @@
 // Contact sheet of Emba's moods and emotes: qs -p preview.qml
 import QtQuick
 import Quickshell
+import qs
 
 // A layer-shell panel rather than a window so the compositor never tiles it:
 // dev/shot.sh grabs it at a fixed spot in the bottom-right corner.
@@ -12,7 +13,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 960
     implicitHeight: 340
-    color: "#1b1d22"
+    color: "#262a36"
 
     Grid {
         anchors.centerIn: parent
@@ -20,7 +21,7 @@ PanelWindow {
         spacing: 14
 
         Repeater {
-            model: ["idle", "working", "waiting", "done", "error", "sleeping", "limit", "thinking", "love", "dizzy"]
+            model: ["idle", "working", "waiting", "done", "error", "hungry", "sleepy", "listening", "love", "dizzy"]
 
             Column {
                 required property string modelData

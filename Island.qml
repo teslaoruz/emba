@@ -66,6 +66,7 @@ Item {
         leaveTimer.stop();
     }
     function collapse() {
+        playAnim.stop();
         App.followUp = false;
         open = false;
         forcedView = "";
@@ -420,7 +421,7 @@ Item {
                 width: 12
                 height: 12
                 radius: 6
-                visible: false
+                visible: playAnim.running
                 color: "#ffd166"
                 border.width: 2
                 border.color: "#f4a259"
@@ -428,9 +429,8 @@ Item {
                 SequentialAnimation {
                     id: playAnim
 
-                    onStarted: toy.visible = true
                     onFinished: {
-                        toy.visible = false;
+                        // visible follows playAnim.running
                         panda.emote("happy", 1.2);
                     }
 
@@ -460,7 +460,7 @@ Item {
                 width: 6
                 height: 22
                 radius: 3
-                visible: false
+                visible: feedAnim.running
                 color: "#7cc46a"
                 rotation: 20
 
@@ -483,9 +483,7 @@ Item {
                 SequentialAnimation {
                     id: feedAnim
 
-                    onStarted: snack.visible = true
                     onFinished: {
-                        snack.visible = false;
                         panda.gulp();
                     }
 
@@ -529,7 +527,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, 190)
                     elide: Text.ElideRight
-                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.focusSession ? (root.focusSession.ticker.slice(-1)[0] ?? root.focusSession.name) : ""
+                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : ""
                     color: root.pending.length ? Theme.warn : Theme.text
                     font.pixelSize: 12
                     font.weight: Font.Medium

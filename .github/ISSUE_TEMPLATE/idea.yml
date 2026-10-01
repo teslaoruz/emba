@@ -1,0 +1,14 @@
+name: An idea
+description: Something Emba could do, a new agent, a plugin
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Emba to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: When would it help you?
