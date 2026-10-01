@@ -1101,7 +1101,7 @@ Item {
                     width: parent.width - 20
                     text: root.pending[0]?.full ?? ""
                     color: Theme.text
-                    font.family: "monospace"
+                    font.family: Qt.platform.os === "windows" ? "Consolas" : Qt.platform.os === "osx" ? "Menlo" : "monospace"
                     font.pixelSize: 12
                     wrapMode: Text.WrapAnywhere
                     maximumLineCount: 7
