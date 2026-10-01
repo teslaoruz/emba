@@ -39,6 +39,8 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 
 <div align="center">
 <img src="docs/moods.png" width="760" alt="Emba's moods: idle, working, waiting, done, error, hungry, sleepy, listening, love, dizzy">
+<br><br>
+<img src="docs/views.png" width="760" alt="The island: a permission request, the sessions overview, a finished task, hovering the corner, and the small pill">
 </div>
 
 ## Install
@@ -55,7 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/teslaoruz/emba/main/install.sh | sh
 irm https://raw.githubusercontent.com/teslaoruz/emba/main/install.ps1 | iex
 ```
 
-**Arch Linux**: [`emba-git`](packaging/aur/PKGBUILD) on the AUR.
+**Arch Linux**: build the package from [`packaging/aur`](packaging/aur/PKGBUILD) with `makepkg -si`.
 
 The installer asks before connecting any agent and shows you every change it makes to an agent's
 settings; each file gets a backup first. Nothing needs admin rights. To remove everything later:
