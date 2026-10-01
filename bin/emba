@@ -330,6 +330,23 @@ TERMINALS = [
 ]
 
 
+def last_terminal():
+    """The terminal emulator the user focused most recently (Hyprland only), or ""."""
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return ""
+    try:
+        out = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=2).stdout
+        clients = sorted(json.loads(out), key=lambda c: c.get("focusHistoryID", 99))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ""
+    names = {name for name, _ in TERMINALS} | {"footclient"}
+    for c in clients:
+        name = c.get("class", "").lower().rsplit(".", 1)[-1]  # org.wezfurlong.wezterm -> wezterm
+        if name in names and shutil.which(name):
+            return name
+    return ""
+
+
 def open_terminal(cwd, argv):
     """Open the user's terminal in `cwd` running `argv`. No shell is involved."""
     if not Path(cwd).is_dir():
@@ -346,8 +363,8 @@ def open_terminal(cwd, argv):
         else:
             subprocess.Popen(["cmd", "/c", "start", "", "/D", cwd, "cmd", "/k", exe] + argv[1:])
         return
-    # the user's choice first: $TERMINAL, then the desktop's default, then a guess
-    chosen = os.environ.get("TERMINAL", "")
+    # the user's choice first: $TERMINAL, then the terminal they used last, then the desktop's default
+    chosen = os.environ.get("TERMINAL", "") or last_terminal()
     prefix = None
     if chosen:
         prefix = [chosen] + next((args for name, args in TERMINALS if Path(chosen).name == name), ["-e"])
