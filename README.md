@@ -32,13 +32,17 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 - **Feed it files.** Drop a file on Emba to ask about it.
 - **Talk to it** (optional). Shake the mouse or say "Hey Emba", ask out loud, hear the answer.
   Speech is recognised and spoken on your computer; nothing is sent anywhere.
+- **It has a life of its own.** Left alone, Emba dances, stretches, hops, sneezes and chases its
+  tail; while an agent works it types on a tiny laptop, and it cheers with confetti when work is done.
 - **Look after it.** Emba gets hungry, sleepy and a bit lonely. Rub the cursor over it to pet it,
   double-click to feed it bamboo, click the island to throw it a ball, hold it to tuck it in.
 - **Make it yours.** It follows your desktop's colours (Caelestia, pywal, or your own), sits in
   any corner, and can be extended with plugins.
 
 <div align="center">
-<img src="docs/moods.png" width="760" alt="Emba's moods: idle, working, waiting, done, error, hungry, sleepy, listening, love, dizzy">
+<img src="docs/moves.gif" width="260" alt="Emba waving, dancing, typing on a tiny laptop, thinking, jumping for attention, stretching, sneezing and celebrating">
+<br>
+<img src="docs/moods.png" width="760" alt="Emba's moods: idle, working, thinking, listening, needs you, done, dancing, stretching, sleepy, petted">
 <br><br>
 <img src="docs/views.png" width="760" alt="The island: a permission request, the sessions overview, a finished task, hovering the corner, and the small pill">
 </div>

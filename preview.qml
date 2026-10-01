@@ -1,4 +1,4 @@
-// Contact sheet of Emba's moods and emotes: qs -p preview.qml
+// Contact sheet of Emba's moods and moves: qs -p preview.qml
 import QtQuick
 import Quickshell
 import qs
@@ -21,21 +21,42 @@ PanelWindow {
         spacing: 14
 
         Repeater {
-            model: ["idle", "working", "waiting", "done", "error", "hungry", "sleepy", "listening", "love", "dizzy"]
+            model: [
+                { label: "idle", mood: "idle" },
+                { label: "working", mood: "working" },
+                { label: "thinking", mood: "thinking" },
+                { label: "listening", mood: "listening" },
+                { label: "needs you", mood: "waiting" },
+                { label: "done", mood: "done" },
+                { label: "dancing", mood: "idle", act: "dance" },
+                { label: "stretching", mood: "idle", act: "stretch" },
+                { label: "sleepy", mood: "sleepy" },
+                { label: "petted", mood: "idle", emote: "love" }
+            ]
 
             Column {
-                required property string modelData
+                required property var modelData
 
                 Panda {
+                    id: pd
+
                     width: 130
                     height: 130
-                    mood: ["love", "dizzy"].includes(modelData) ? "idle" : modelData
-                    Component.onCompleted: if (["love", "dizzy"].includes(modelData))
-                        emote(modelData, 999)
+                    mood: modelData.mood
+                    lively: false
+
+                    // keep the move going so a still frame can catch it
+                    Timer {
+                        running: !!modelData.act || !!modelData.emote
+                        interval: modelData.act === "stretch" ? 2100 : 2500
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: modelData.act ? pd.act(modelData.act) : pd.emote(modelData.emote, 999)
+                    }
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: modelData
+                    text: modelData.label
                     color: "#8a8f98"
                     font.pixelSize: 11
                 }
