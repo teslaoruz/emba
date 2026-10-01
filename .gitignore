@@ -1,2 +1,5 @@
 dev/*.png
-dev/qs.log
+dev/*.log
+dev/*.pid
+dev/answer.txt
+__pycache__/

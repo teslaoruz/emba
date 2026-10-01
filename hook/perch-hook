@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""Claude Code hook for perch. Standard library only.
+
+Forwards each hook event to perch over a Unix socket. For PermissionRequest it
+stays connected and waits for perch to answer.
+
+perch not running, slow, or gone -> exit 0 with no output, and Claude Code
+carries on exactly as if this hook did not exist. A hook that prints nothing
+never decides a permission, so every failure here falls back to the normal
+terminal prompt.
+
+    perch-hook                      as a hook: payload on stdin
+    perch-hook statusline [CMD]     as the statusLine: forwards the rate limits,
+                                    then runs CMD (your old statusline) with the
+                                    same stdin and prints what it prints
+"""
+
+import json
+import os
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+SOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "perch.sock"
+CONNECT_TIMEOUT = 0.3
+DECISION_TIMEOUT = 570  # Claude Code kills PermissionRequest hooks at 600 s
+
+
+def connect():
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(CONNECT_TIMEOUT)
+    s.connect(str(SOCK))
+    return s
+
+
+def send(msg, wait=False):
+    """Send one JSON line; with wait, return perch's one-line JSON reply."""
+    try:
+        s = connect()
+    except OSError:
+        return None
+    with s:
+        try:
+            s.sendall((json.dumps(msg) + "\n").encode())
+            if not wait:
+                return None
+            s.settimeout(DECISION_TIMEOUT)
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(4096)
+                if not chunk:
+                    return None  # perch closed on us: answered elsewhere
+                buf += chunk
+                if len(buf) > 65536:
+                    return None
+            return json.loads(buf)
+        except (OSError, ValueError):
+            return None
+
+
+def target(tool, args):
+    """The thing a tool call acts on, short enough for a one-line ticker."""
+    if tool == "Bash":
+        return args.get("command", "")
+    for key in ("file_path", "notebook_path", "path", "url", "pattern", "query", "description", "prompt"):
+        v = args.get(key)
+        if v:
+            return os.path.basename(v) if key in ("file_path", "notebook_path") else str(v)
+    return ""
+
+
+def hypr_window(pid):
+    """Address of the Hyprland window that owns `pid` or one of its parents."""
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return ""
+    try:
+        clients = json.loads(subprocess.run(
+            ["hyprctl", "-j", "clients"], capture_output=True, text=True, timeout=2).stdout)
+    except Exception:
+        return ""
+    owners = {c.get("pid"): c.get("address") for c in clients if c.get("pid")}
+    for _ in range(16):
+        if pid in owners:
+            return owners[pid]
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            pid = int(stat[stat.rindex(")") + 2:].split()[1])
+        except Exception:
+            return ""
+        if pid <= 1:
+            return ""
+    return ""
+
+
+def last_reply(transcript):
+    """Last thing Claude said, read from the tail of the transcript."""
+    try:
+        with open(transcript, "rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 200_000))
+            lines = fh.read().decode(errors="ignore").splitlines()
+    except OSError:
+        return ""
+    for line in reversed(lines):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("type") != "assistant":
+            continue
+        for part in reversed(rec.get("message", {}).get("content") or []):
+            if isinstance(part, dict) and part.get("type") == "text" and part.get("text", "").strip():
+                return part["text"].strip()[:600]
+    return ""
+
+
+def statusline(argv):
+    raw = sys.stdin.buffer.read()
+    try:
+        data = json.loads(raw or b"{}")
+        rl = data.get("rate_limits") or {}
+        send({"ev": "Limits", "sid": data.get("session_id", ""), "model": (data.get("model") or {}).get("display_name", ""),
+              "five_hour": rl.get("five_hour"), "seven_day": rl.get("seven_day")})
+    except Exception:
+        pass
+    if argv:
+        out = subprocess.run(argv[0] if len(argv) == 1 else argv, input=raw, shell=len(argv) == 1,
+                             capture_output=True)
+        sys.stdout.buffer.write(out.stdout)
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "statusline":
+        return statusline(sys.argv[2:])
+    try:
+        p = json.load(sys.stdin)
+    except ValueError:
+        return
+    ev = p.get("hook_event_name", "")
+    tool = p.get("tool_name", "")
+    args = p.get("tool_input") or {}
+    msg = {
+        "ev": ev,
+        "sid": p.get("session_id", ""),
+        "cwd": p.get("cwd", ""),
+        "pid": os.getppid(),
+        "tool": tool,
+        "target": target(tool, args)[:300],
+    }
+    if ev == "SessionStart":
+        msg["win"] = hypr_window(os.getppid())
+    elif ev == "UserPromptSubmit":
+        msg["target"] = (p.get("prompt") or "")[:300]
+    elif ev == "Notification":
+        msg["text"] = p.get("message", "")
+    elif ev == "Stop":
+        msg["text"] = p.get("last_assistant_message") or last_reply(p.get("transcript_path", ""))
+    elif ev == "PermissionRequest":
+        suggestions = p.get("permission_suggestions") or []
+        msg.update(id=p.get("tool_use_id", ""), full=target(tool, args) if tool == "Bash" else json.dumps(args, indent=1)[:2000],
+                   always=bool(suggestions),
+                   rule=", ".join(r for s in suggestions if isinstance(s, dict) for r in (s.get("rules") or []))[:200])
+        reply = send(msg, wait=True)
+        if not reply or reply.get("behavior") not in ("allow", "deny"):
+            return
+        decision = {"behavior": reply["behavior"]}
+        if reply["behavior"] == "deny":
+            decision["message"] = "Denied from perch."
+        elif reply.get("always") and suggestions:
+            decision["updatedPermissions"] = suggestions
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))
+        return
+    send(msg)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        pass  # never get in Claude Code's way

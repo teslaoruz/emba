@@ -1,0 +1,12 @@
+[Unit]
+Description=perch, a red panda that watches your Claude Code sessions
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/env qs -c perch
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
