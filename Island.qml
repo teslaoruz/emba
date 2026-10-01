@@ -72,11 +72,25 @@ Item {
     property string draft: ""
     readonly property bool sticky: ["approval", "result", "file", "drop", "listen"].includes(view) || (view === "ask" && draft !== "") || App.asking || App.voiceState !== ""
 
+    // userOpened: you opened it (hover, click, a command) rather than Emba
+    // popping up by itself; only then may it take the keyboard and close on
+    // a click elsewhere.
+    property bool userOpened: false
+    // a click on the island since the current request appeared: Y / N need it
+    property bool armed: false
+    onPendingChanged: armed = false
+
     function expand(v) {
         forcedView = v ?? "";
         open = true;
         peeking = false;
+        userOpened = true;
         leaveTimer.stop();
+    }
+    function expandAuto(v) {
+        const was = open && userOpened;
+        expand(v);
+        userOpened = was;
     }
     function collapse() {
         draft = "";
@@ -93,20 +107,20 @@ Item {
         function onPermissionAsked() {
             panda.surprise();
             if (App.cfg.autoOpenOnPermission)
-                root.expand(root.forcedView === "ask" ? "ask" : "");
+                root.expandAuto(root.forcedView === "ask" ? "ask" : "");
         }
         function onFinished(sid) {
             if (!App.cfg.celebrate || (root.open && root.view !== "overview"))
                 return;
             root.finishedSid = sid;
-            root.expand("finished");
+            root.expandAuto("finished");
             if (!hover.hovered)
                 autoClose.restart();
         }
         function onLimitWarning(window, percent) {
             panda.emote("surprised", 1);
             if (!root.open || root.view === "overview") {
-                root.expand("limit");
+                root.expandAuto("limit");
                 autoClose.restart();
             }
         }
@@ -159,7 +173,7 @@ Item {
     Timer {
         id: openTimer
 
-        onTriggered: root.expand()
+        onTriggered: root.expandAuto()  // hovering never takes the keyboard; a click does
     }
     Timer {
         id: unpeek
@@ -310,6 +324,17 @@ Item {
                         else if (root.open)
                             leaveTimer.restart();
                     }
+                }
+            }
+
+            // Notices any click on the island (to arm Y / N) without taking it:
+            // a PointHandler only watches, so the buttons still get every click.
+            PointHandler {
+                acceptedButtons: Qt.LeftButton
+                onActiveChanged: if (active) {
+                    root.armed = true;
+                    if (root.open)
+                        root.userOpened = true;
                 }
             }
 
@@ -672,7 +697,7 @@ Item {
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Escape) {
                     root.collapse();
-                } else if (root.view === "approval" && root.pending.length) {
+                } else if (root.view === "approval" && root.pending.length && root.armed) {
                     if (event.key === Qt.Key_Y)
                         root.decide("allow");
                     else if (event.key === Qt.Key_N)

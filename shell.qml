@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import qs
 
 ShellRoot {
@@ -37,7 +38,7 @@ ShellRoot {
         // The ask box takes the keyboard (you asked to type); everything else,
         // approvals above all, only gets keys after you click it.
         // and while open, a click on the island gives it the keyboard like any window
-        WlrLayershell.keyboardFocus: island.open && island.view === "ask" ? WlrKeyboardFocus.Exclusive : island.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: island.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         mask: Region {
             item: island.shape
         }
@@ -57,6 +58,14 @@ ShellRoot {
             origin: win.origin
         }
     }
+    // Click anywhere else and the island closes, like a menu. Only when you
+    // opened it yourself, and never over a permission request.
+    HyprlandFocusGrab {
+        windows: [win]
+        active: island.open && island.userOpened && island.view !== "approval"
+        onCleared: island.collapse()
+    }
+
 
     LazyLoader {
         active: App.settingsOpen

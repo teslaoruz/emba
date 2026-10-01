@@ -26,6 +26,10 @@ Window {
     visible: true
     title: "Emba"
 
+    // clicking anywhere else closes the island, when you opened it yourself
+    onActiveChanged: if (!active && island.open && island.userOpened && island.view !== "approval")
+        island.collapse()
+
     Island {
         id: island
 
