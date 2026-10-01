@@ -5,18 +5,15 @@ import QtQuick.Layouts
 import Quickshell
 import qs
 
-// The settings window: `emba settings`, the gear on the island, or the
-// desktop entry. Every control writes straight to ~/.config/emba/config.json.
-FloatingWindow {
+// The settings page: `emba settings`, the gear on the island, or the desktop
+// entry. Each host wraps it in its own window. Every control writes straight
+// to ~/.config/emba/config.json.
+Rectangle {
     id: win
 
-    title: "Emba"
     implicitWidth: 460
     implicitHeight: 680
     color: Theme.base
-
-    onVisibleChanged: if (!visible)
-        App.settingsOpen = false
 
     readonly property var st: App.status
 
@@ -306,7 +303,7 @@ FloatingWindow {
                     font.underline: true
 
                     HoverHandler { id: cfgHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: Quickshell.execDetached(["xdg-open", App.configPath]) }
+                    TapHandler { onTapped: Qt.openUrlExternally(App.configPath.startsWith("/") ? `file://${App.configPath}` : `file:///${App.configPath.replace(/\\/g, "/")}`) }
                 }
                 Item { Layout.fillWidth: true }
                 Text {
@@ -397,7 +394,7 @@ FloatingWindow {
         TapHandler { id: bt; onTapped: btn.clicked() }
     }
 
-    component Toggle: RowLayout {
+    component Toggle: Item {
         id: tg
 
         property string text
@@ -406,25 +403,39 @@ FloatingWindow {
         signal toggled(bool on)
 
         Layout.fillWidth: true
+        implicitHeight: Math.max(labels.implicitHeight, 22)
         opacity: enabled ? 1 : 0.5
 
-        ColumnLayout {
-            Layout.fillWidth: true
+        Column {
+            id: labels
+
+            anchors.left: parent.left
+            anchors.right: knob.left
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
             spacing: 1
 
             Text {
+                width: parent.width
                 text: tg.text
                 color: Theme.text
                 font.pixelSize: 12
+                wrapMode: Text.Wrap
             }
             Text {
+                width: parent.width
                 visible: tg.hint !== ""
                 text: tg.hint
                 color: Theme.faint
                 font.pixelSize: 10
+                wrapMode: Text.Wrap
             }
         }
         Rectangle {
+            id: knob
+
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             width: 38
             height: 22
             radius: 11

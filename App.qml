@@ -10,7 +10,8 @@ Singleton {
     id: root
 
     // ---------------------------------------------------------------- config
-    readonly property string configPath: `${Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"}/emba/config.json`
+    readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME") || (Qt.platform.os === "windows" ? Quickshell.env("APPDATA") : Quickshell.env("HOME") + "/.config")
+    readonly property string configPath: `${configDir}/emba/config.json`
     readonly property var defaults: ({
             position: "top-right",   // top-left top top-right left right bottom-left bottom bottom-right
             marginX: 12,
@@ -299,7 +300,8 @@ Singleton {
 
     SocketServer {
         active: true
-        path: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
+        // the desktop host passes its own address (named pipe on Windows)
+        path: Quickshell.env("EMBA_SOCKET") || `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
 
         handler: Socket {
             id: conn

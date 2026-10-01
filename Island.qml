@@ -412,27 +412,59 @@ Item {
             leaveTimer.restart();
     }
 
-    // ---- the cursor, anywhere on screen (Hyprland only) ----
+    // ---- the cursor, anywhere on screen ----
+    // Wayland hides the global cursor from clients, so on Hyprland we ask the
+    // compositor; the desktop host (Windows, macOS, X11) can read it directly.
     QtObject {
         id: cursor
 
         property var gaze: null
+        readonly property bool hostCursor: typeof Quickshell.cursorPos === "function"
+        readonly property bool wanted: (App.cfg.trackCursor ?? true) && root.mode !== "hidden"
+
+        function aim(x, y) {
+            // mapToItem(null) is already in window pixels, scale included
+            const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
+            gaze = Qt.point(x - root.origin.x - c.x, y - root.origin.y - c.y);
+        }
     }
 
     Process {
-        running: (App.cfg.trackCursor ?? true) && root.mode !== "hidden" && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
+        running: cursor.wanted && !cursor.hostCursor && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
         command: ["sh", "-c", "while hyprctl cursorpos; do sleep 0.08; done"]
         stdout: SplitParser {
             onRead: line => {
                 const m = line.match(/(-?\d+),\s*(-?\d+)/);
-                if (!m)
-                    return;
-                const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
-                cursor.gaze = Qt.point(+m[1] - root.origin.x - c.x * root.s, +m[2] - root.origin.y - c.y * root.s);
+                if (m)
+                    cursor.aim(+m[1], +m[2]);
             }
         }
         onRunningChanged: if (!running)
             cursor.gaze = null
+    }
+
+    Timer {
+        running: cursor.wanted && cursor.hostCursor
+        interval: 60
+        repeat: true
+        onTriggered: {
+            const p = Quickshell.cursorPos();
+            cursor.aim(p.x, p.y);
+        }
+        onRunningChanged: if (!running)
+            cursor.gaze = null
+    }
+
+    // clipboard that works on every host
+    TextEdit {
+        id: clip
+
+        visible: false
+    }
+    function copy(text) {
+        clip.text = text;
+        clip.selectAll();
+        clip.copy();
     }
 
     // ================================================================ views
@@ -983,7 +1015,7 @@ Item {
 
                 Pill {
                     text: "Copy"
-                    onClicked: Quickshell.execDetached(["wl-copy", App.answer])
+                    onClicked: root.copy(App.answer)
                 }
                 Pill {
                     text: "Ask again"
@@ -1027,7 +1059,7 @@ Item {
                 Pill {
                     text: "Copy path"
                     onClicked: {
-                        Quickshell.execDetached(["wl-copy", root.files.join(" ")]);
+                        root.copy(root.files.join(" "));
                         root.collapse();
                     }
                 }

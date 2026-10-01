@@ -58,8 +58,17 @@ ShellRoot {
     LazyLoader {
         active: App.settingsOpen
 
-        Settings {
+        FloatingWindow {
+            title: "Emba"
+            implicitWidth: 460
+            implicitHeight: 680
             visible: true
+            onVisibleChanged: if (!visible)
+                App.settingsOpen = false
+
+            Settings {
+                anchors.fill: parent
+            }
         }
     }
 }
