@@ -15,8 +15,8 @@ Singleton {
     readonly property string configPath: `${configDir}/emba/config.json`
     readonly property var defaults: ({
             position: "top-right",   // top-left top top-right left right bottom-left bottom bottom-right
-            marginX: 12,
-            marginY: 8,
+            marginX: 0,              // 0 = flush with the screen edge, notch style
+            marginY: 0,
             screen: "",              // output name, "" = first screen
             scale: 1,
             color: "#e2683c",        // Emba's fur
@@ -407,7 +407,7 @@ Singleton {
         const s = map[sid];
         if (!s)
             return;
-        let cmd = cfg.focusCommand?.length ? cfg.focusCommand : (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") && s.win ? ["hyprctl", "dispatch", "focuswindow", "address:{window}"] : []);
+        let cmd = cfg.focusCommand?.length ? cfg.focusCommand : (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") && s.win ? [python, emba, "focus", "{window}"] : []);
         if (!cmd.length)
             return;
         Quickshell.execDetached(cmd.map(a => String(a).replace("{window}", s.win ?? "").replace("{pid}", s.pid ?? "").replace("{cwd}", s.cwd ?? "")));

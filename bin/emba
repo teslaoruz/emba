@@ -345,18 +345,28 @@ def open_terminal(cwd, argv):
         else:
             subprocess.Popen(["cmd", "/c", "start", "", "/D", cwd, "cmd", "/k", exe] + argv[1:])
         return
+    # the user's choice first: $TERMINAL, then the desktop's default, then a guess
     chosen = os.environ.get("TERMINAL", "")
     prefix = None
-    for name, args in TERMINALS:
-        if (chosen and Path(chosen).name == name) or (not chosen and shutil.which(name)):
-            prefix = [chosen or name] + args
-            break
-    if prefix is None and shutil.which("xdg-terminal-exec"):
+    if chosen:
+        prefix = [chosen] + next((args for name, args in TERMINALS if Path(chosen).name == name), ["-e"])
+    elif shutil.which("xdg-terminal-exec"):
         prefix = ["xdg-terminal-exec"]
+    else:
+        prefix = next(([name] + args for name, args in TERMINALS if shutil.which(name)), None)
     if prefix is None:
         sys.exit("no terminal found; set $TERMINAL")
     subprocess.Popen(prefix + argv, cwd=cwd, start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def focus_window(address):
+    """Focus a Hyprland window, whichever dispatch syntax this Hyprland speaks."""
+    if not re.fullmatch(r"0x[0-9a-fA-F]+", address or ""):
+        return
+    out = subprocess.run(["hyprctl", "dispatch", "focuswindow", f"address:{address}"], capture_output=True, text=True)
+    if out.stdout.strip() != "ok":  # a Lua-configured Hyprland rejects the classic syntax
+        subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})'], capture_output=True)
 
 
 def status():
@@ -442,6 +452,8 @@ def main():
             print(f"running: {st['running']}\nautostart: {st['autostart']}\nhost: {st['host']}")
             for a, v in st["agents"].items():
                 print(f"{a}: {'connected' if v['connected'] else 'installed' if v['installed'] else 'not installed'}")
+    elif cmd == "focus" and rest:
+        focus_window(rest[0])
     elif cmd == "terminal" and len(rest) >= 2:
         open_terminal(rest[0], rest[1:])
     elif cmd == "plugins":

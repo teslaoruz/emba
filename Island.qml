@@ -23,6 +23,12 @@ Item {
     property point origin
 
     readonly property alias shape: shape
+    // which screen edges the island sits flush against (no margin on that side)
+    readonly property bool edgeTop: vAlign === 0 && (App.cfg.marginY ?? 0) === 0
+    readonly property bool edgeBottom: vAlign === 1 && (App.cfg.marginY ?? 0) === 0
+    readonly property bool edgeLeft: hAlign === 0 && (App.cfg.marginX ?? 0) === 0
+    readonly property bool edgeRight: hAlign === 1 && (App.cfg.marginX ?? 0) === 0
+
     readonly property bool wantsKeys: open && ["ask", "approval", "result", "file"].includes(view)
 
     // ---- state machine ----
@@ -46,7 +52,10 @@ Item {
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
 
-    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (sessions.length || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
+    // busy: something is working, asking or just finished. Otherwise Emba
+    // tucks away into its corner until the mouse comes looking.
+    readonly property bool busy: pending.length > 0 || sessions.some(s => ["working", "thinking", "waiting", "done"].includes(s.state))
+    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -193,7 +202,8 @@ Item {
     // ---- geometry per mode, unscaled ----
     readonly property size target: {
         if (mode === "hidden")
-            return Qt.size(46, 10);
+            // invisible: just a place to hover. A corner, or a strip along the edge
+            return (edgeTop || edgeBottom) && (edgeLeft || edgeRight) ? Qt.size(18, 18) : (edgeTop || edgeBottom) ? Qt.size(180, 6) : (edgeLeft || edgeRight) ? Qt.size(6, 140) : Qt.size(46, 10);
         if (mode === "peek")
             return Qt.size(76, 70);
         if (mode === "compact")
@@ -210,46 +220,56 @@ Item {
         scale: root.s
         transformOrigin: Item.TopLeft
 
-        Rectangle {
+        // the visible outline, flush with the screen edges the island touches
+        Notch {
+            id: notch
+
+            x: shape.x - bodyX
+            y: shape.y - bodyY
+            width: implicitWidth
+            height: implicitHeight
+            body: Qt.size(shape.width, shape.height)
+            atTop: root.edgeTop
+            atBottom: root.edgeBottom
+            atLeft: root.edgeLeft
+            atRight: root.edgeRight
+            radius: root.mode === "expanded" ? 30 : Math.min(shape.height / 2, 22)
+            ear: root.mode === "hidden" ? 0 : Math.min(16, shape.height / 3)
+            fill: Theme.base
+            // a glow along the outline while something waits on you
+            stroke: root.pending.length && root.mode !== "expanded" ? Qt.alpha(Theme.warn, pulse.value) : Qt.alpha(Theme.text, 0.06)
+            strokeWidth: root.pending.length && root.mode !== "expanded" ? 2 : 1
+            opacity: root.mode === "hidden" ? 0 : 1
+
+            Behavior on radius { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+            Behavior on ear { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 180 } }
+
+            QtObject {
+                id: pulse
+
+                property real value: 0.3
+
+                SequentialAnimation on value {
+                    running: root.pending.length > 0
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
+                }
+            }
+        }
+
+        Item {
             id: shape
 
             width: root.target.width
             height: root.target.height
             x: (stage.width - width) * root.hAlign
             y: (stage.height - height) * root.vAlign
-            radius: root.mode === "expanded" ? 26 : Math.min(height / 2, 24)
-            color: Qt.alpha(Theme.base, root.mode === "hidden" ? 0.75 : 0.96)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, root.mode === "hidden" ? 0.12 : 0.07)
             clip: true
 
-            Behavior on width { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.1 } }
-            Behavior on height { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.1 } }
-            Behavior on radius { NumberAnimation { duration: 340 } }
-            Behavior on color { ColorAnimation { duration: 340 } }
-
-            // a pulse around the edge while something waits on you
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.width: 2
-                border.color: Theme.warn
-                opacity: root.pending.length && root.mode !== "expanded" ? pulse.value : 0
-
-                QtObject {
-                    id: pulse
-
-                    property real value: 0.3
-
-                    SequentialAnimation on value {
-                        running: root.pending.length > 0
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
-                    }
-                }
-            }
+            Behavior on width { NumberAnimation { duration: root.opening ? 560 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.05 } }
+            Behavior on height { NumberAnimation { duration: root.opening ? 560 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.05 } }
 
             HoverHandler {
                 id: hover
@@ -737,6 +757,7 @@ Item {
     function plain(line) {
         if (!line)
             return "";
+        line = line.replace(/\s+/g, " ").trim();  // one line, however long the command
         if (line.startsWith("› "))
             return `asked: ${line.slice(2)}`;
         if (line.startsWith("needs you: "))

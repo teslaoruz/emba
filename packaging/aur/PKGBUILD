@@ -30,7 +30,7 @@ pkgver() {
 package() {
     cd "$_pkgname"
     install -d "$pkgdir/usr/share/$_pkgname"
-    cp -r App.qml Theme.qml Pet.qml Island.qml Panda.qml Settings.qml shell.qml \
+    cp -r App.qml Theme.qml Pet.qml Island.qml Notch.qml Panda.qml Settings.qml shell.qml \
         bin hook desktop voice plugins integrations assets \
         "$pkgdir/usr/share/$_pkgname/"
     install -Dm755 /dev/stdin "$pkgdir/usr/bin/emba" << 'EOF'
