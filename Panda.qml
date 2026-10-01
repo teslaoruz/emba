@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import qs
 
 // Emba, the red panda: a soft little mochi-shaped creature, drawn on a Canvas
@@ -475,7 +476,6 @@ Item {
         p.glow = approach(p.glow, (m === "idle" || !moodColours[m]) ? 0 : 0.5 + 0.12 * Math.sin(t * 3), 5, dt);
 
         spawnParticles(m, e, dt);
-        canvas.requestPaint();
     }
 
     // ---- particles: little things that float off and fade ----
@@ -601,30 +601,404 @@ Item {
         }
     }
 
-    FrameAnimation {
-        running: root.running
-        onTriggered: root.step(Math.min(frameTime, 0.05))
+    // Frames are capped: a soft little creature looks just as smooth at 30 fps,
+    // and drawing is what costs. The island asks for less when Emba is small.
+    property real fps: 30
+    property real pending: 0
+    property point lastGaze
+
+    // Moving: full rate. Just breathing and blinking: 10 fps is plenty, and
+    // it is most of the time.
+    function busy() {
+        const g = root.gaze, moved = g && Math.hypot(g.x - lastGaze.x, g.y - lastGaze.y) > 3;
+        if (g)
+            lastGaze = g;
+        return moved || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
     }
 
-    // ---- drawing, in a 100x100 box centred on the body ----
-    // The canvas is larger than the item so dances, paws and the tail have
-    // room to move without being clipped.
-    Canvas {
-        id: canvas
+    // A plain timer, not FrameAnimation: FrameAnimation keeps Qt's render
+    // loop awake every vsync even when nothing moves, which cost ~15% CPU.
+    property real lastTick: 0
 
-        anchors.centerIn: parent
-        width: parent.width * 1.4
-        height: parent.height * 1.4
-        renderStrategy: Canvas.Cooperative
+    Timer {
+        id: ticker
 
-        onPaint: {
-            const c = getContext("2d");
-            c.reset();
-            const s = root.width / 100;
-            c.translate(width / 2, height / 2 + 2 * s);
-            c.scale(s, s);
-            root.draw(c, root.mood, p.emoteLeft > 0 ? p.emote : "");
+        running: root.running
+        repeat: true
+        interval: 1000 / root.fps
+        onTriggered: {
+            const now = Date.now();
+            const dt = root.lastTick ? (now - root.lastTick) / 1000 : interval / 1000;
+            root.lastTick = now;
+            root.step(Math.min(dt, 0.1));
+            interval = 1000 / (root.busy() ? root.fps : Math.min(root.fps, 10));
         }
+        onRunningChanged: root.lastTick = 0
+    }
+
+    // ---- drawing ----
+    // Emba is built from scene-graph items (circles, ellipses, vector shapes)
+    // in a 100x100 unit space centred on the body. Each frame only moves and
+    // reshapes them; the GPU does the drawing, so Emba costs almost nothing
+    // to animate. `e` is the current emote, `m` the mood.
+    readonly property string e: p.emoteLeft > 0 ? p.emote : ""
+    readonly property string m: root.mood
+    readonly property color fur: root.bodyColor
+    readonly property color dark: "#3a2420"
+    readonly property color cream: "#fff4e8"
+    readonly property color ring: shade(fur, 0.66)
+    readonly property color pawCol: shade(fur, 0.5)
+    readonly property real fx: p.lookX * 6
+    readonly property real fy: -p.lookY * 4
+    // which kind of eyes to show
+    readonly property string eyes: e === "love" ? "love" : e === "dizzy" ? "dizzy" : (m === "error" && !e) ? "x" : (e === "happy" || (m === "done" && !e) || p.act === "dance") ? "happy" : e === "annoyed" ? "annoyed" : p.eyeOpen < 0.15 ? "shut" : "open"
+
+    // an ellipse: a circle squashed vertically, so it stays a true ellipse
+    component Ell: Rectangle {
+        property real cx
+        property real cy
+        property real rx: 1
+        property real ry: rx
+
+        x: cx - rx
+        y: cy - rx
+        width: rx * 2
+        height: rx * 2
+        radius: rx
+        antialiasing: true
+        transform: Scale {
+            origin.x: rx
+            origin.y: rx
+            yScale: ry / Math.max(rx, 0.001)
+        }
+    }
+
+    // a stroked or filled vector path in unit coordinates
+    component VPath: Shape {
+        id: vp
+
+        property string d
+        property color fill: "transparent"
+        property color stroke: "transparent"
+        property real line: 0
+
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            fillColor: vp.fill
+            strokeColor: vp.stroke
+            strokeWidth: vp.line
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+
+            PathSvg {
+                path: vp.d
+            }
+        }
+    }
+
+    Item {
+        id: units
+
+        x: root.width / 2
+        y: root.height / 2 + 2 * root.width / 100
+        scale: root.width / 100
+        transformOrigin: Item.TopLeft
+
+        // glow behind, in the mood colour
+        Shape {
+            visible: p.glow > 0.01
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                strokeColor: "transparent"
+                fillGradient: RadialGradient {
+                    centerX: 0
+                    centerY: 4
+                    centerRadius: 52
+                    focalX: 0
+                    focalY: 4
+                    GradientStop { position: 0.15; color: Qt.alpha(p.glowColor, p.glow * 0.55) }
+                    GradientStop { position: 1; color: Qt.alpha(p.glowColor, 0) }
+                }
+                PathAngleArc { centerX: 0; centerY: 4; radiusX: 52; radiusY: 52; startAngle: 0; sweepAngle: 360 }
+            }
+        }
+
+        // ground shadow: smaller and fainter the higher Emba hops
+        Ell {
+            readonly property real lift: Math.max(0, -p.bob) / 18
+
+            cx: p.sway * 0.6
+            cy: 39
+            rx: 24 * (1 - lift * 0.35)
+            ry: 3.4 * (1 - lift * 0.35)
+            color: Qt.rgba(0, 0, 0, 0.22 * (1 - lift * 0.5))
+        }
+
+        // everything that moves with the body
+        Item {
+            id: body
+
+            transform: [
+                Rotation { angle: (p.roll + p.spin) * 180 / Math.PI },
+                Scale { origin.y: 34; xScale: p.sx; yScale: p.sy },
+                Translate { x: p.sway; y: p.bob }
+            ]
+
+            // tail: a bushy striped curl that swishes behind
+            Repeater {
+                model: 7
+
+                Ell {
+                    required property int index
+                    readonly property real k: index / 6
+                    readonly property real ang: -0.4 - k * 1.1 + p.tail * k
+
+                    cx: 24 + Math.cos(ang) * 6 + k * 13 + Math.sin(p.tail) * k * 6
+                    cy: 22 - k * 18 + Math.sin(ang) * 2
+                    rx: 8.6 - k * 2.2
+                    color: k > 0.85 ? root.dark : index % 2 === 1 ? root.ring : root.fur
+                }
+            }
+
+            // feet peeking out at the bottom
+            Ell { cx: -12; cy: 33.5; rx: 6; ry: 3.6; color: root.pawCol }
+            Ell { cx: 12; cy: 33.5; rx: 6; ry: 3.6; color: root.pawCol }
+
+            // ears: round, fluffy cream inside, each twitching on its own
+            Repeater {
+                model: [-1, 1]
+
+                Item {
+                    required property int modelData
+
+                    x: 21 * modelData
+                    y: -18
+                    rotation: (0.3 + (modelData < 0 ? p.earL : p.earR) * 0.6) * modelData * 180 / Math.PI
+
+                    Ell { cx: 0; cy: -2; rx: 9.5; ry: 10; color: root.fur }
+                    Ell { cx: 0; cy: -2.2; rx: 5.6; ry: 6.2; color: root.dark }
+                    Ell { cx: 0; cy: 2.6; rx: 4.6; ry: 2.4; color: root.cream }
+                }
+            }
+
+            // the body: one soft rounded square with gentle light from the top left
+            Shape {
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillGradient: RadialGradient {
+                        centerX: -12
+                        centerY: -14
+                        centerRadius: 46
+                        focalX: -12
+                        focalY: -14
+                        GradientStop { position: 0; color: root.shade(root.fur, 1.16) }
+                        GradientStop { position: 0.55; color: root.fur }
+                        GradientStop { position: 1; color: root.shade(root.fur, 0.84) }
+                    }
+                    PathSvg { path: root.squirclePath }
+                }
+            }
+            Ell { cx: -8; cy: -18; rx: 20; ry: 5; color: Qt.rgba(1, 1, 1, 0.14) }
+
+            // the face moves a little with the gaze
+            Item {
+                x: root.fx
+                y: root.fy
+
+                // red-panda brows and the cream muzzle
+                Ell { cx: -10.5; cy: -9; rx: 3.6; ry: 2.5; color: root.cream }
+                Ell { cx: 10.5; cy: -9; rx: 3.6; ry: 2.5; color: root.cream }
+                Ell { cx: 0; cy: 11; rx: 9.5; ry: 6.6; color: root.cream }
+
+                // blush
+                Repeater {
+                    model: [-1, 1]
+
+                    Ell {
+                        required property int modelData
+                        readonly property bool strong: root.e === "love" || p.purr > 0
+
+                        cx: 19 * modelData
+                        cy: 9
+                        rx: 5
+                        ry: 3.4
+                        color: strong ? Qt.rgba(1, 0.36, 0.54, 0.7) : Qt.rgba(1, 0.55, 0.65, 0.5)
+                    }
+                }
+
+                // eyes
+                Repeater {
+                    model: [-1, 1]
+
+                    Item {
+                        id: eye
+
+                        required property int modelData
+                        readonly property real sc: p.eyeScale
+                        readonly property real open: p.eyeOpen
+                        readonly property color ink: "#1e1a24"
+
+                        x: 10.5 * modelData
+                        y: 1.5
+
+                        // open: a glossy dark oval with two catchlights
+                        Item {
+                            visible: root.eyes === "open"
+
+                            Ell { cx: 0; cy: 0; rx: 3.9 * eye.sc; ry: 5.4 * eye.sc * eye.open; color: eye.ink }
+                            Ell { cx: 0; cy: 5.4 * eye.sc * eye.open * 0.55; rx: 2.1 * eye.sc; ry: 1.3 * eye.sc * eye.open; color: Qt.rgba(0.47, 0.31, 0.24, 0.25) }
+                            Ell { cx: 1.1 * eye.sc; cy: -5.4 * eye.sc * eye.open * 0.42; rx: 1.25 * eye.sc; ry: 1.45 * eye.sc * Math.min(1, eye.open * 1.5); color: "white" }
+                            Ell { cx: -1.2 * eye.sc; cy: 5.4 * eye.sc * eye.open * 0.38; rx: 0.6 * eye.sc; color: "white" }
+                            // tired: a flat lid across the top
+                            Rectangle {
+                                visible: (root.m === "limit" || root.m === "sleepy") && !root.e
+                                x: -4.9 * eye.sc
+                                y: -5.4 * eye.sc * eye.open - 1
+                                width: 9.8 * eye.sc
+                                height: 5.4 * eye.sc * eye.open * 0.9
+                                color: root.fur
+                            }
+                        }
+                        VPath {
+                            visible: root.eyes === "shut"
+                            d: "M -3.1 0.1 Q 0 3.4 3.1 0.1"
+                            stroke: eye.ink
+                            line: 2.2
+                        }
+                        VPath {
+                            visible: root.eyes === "happy"
+                            d: "M -3.2 1.2 Q 0 -2.6 3.2 1.2"
+                            stroke: eye.ink
+                            line: 2.2
+                        }
+                        VPath {
+                            visible: root.eyes === "x"
+                            d: "M -3 -3 L 3 3 M 3 -3 L -3 3"
+                            stroke: eye.ink
+                            line: 2.2
+                        }
+                        VPath {
+                            visible: root.eyes === "annoyed"
+                            d: `M ${-3.6 * eye.modelData} -2.8 L ${3.2 * eye.modelData} 0 L ${-3.6 * eye.modelData} 2.8`
+                            stroke: eye.ink
+                            line: 2.2
+                        }
+                        VPath {
+                            visible: root.eyes === "love"
+                            d: "M 0 4.4 C -7.5 -0.7 -3.1 -6.5 0 -2 C 3.1 -6.5 7.5 -0.7 0 4.4 Z"
+                            fill: "#e3122f"  // a proper red heart
+                            scale: eye.sc
+                        }
+                        VPath {
+                            visible: root.eyes === "dizzy"
+                            d: root.spiralPath
+                            stroke: eye.ink
+                            line: 1.5
+                            rotation: p.t * 9 * eye.modelData * 180 / Math.PI
+                        }
+                    }
+                }
+
+                // nose, and the little "ω" mouth (or an open one)
+                VPath {
+                    d: "M -2.4 7.4 Q 0 6.6 2.4 7.4 Q 1 10 0 10.2 Q -1 10 -2.4 7.4 Z"
+                    fill: root.dark
+                }
+                VPath {
+                    visible: p.mouth <= 0.08
+                    d: "M -3.2 11 Q -1.6 12.8 0 10.8 Q 1.6 12.8 3.2 11"
+                    stroke: root.dark
+                    line: 1.1
+                }
+                Ell {
+                    visible: p.mouth > 0.08
+                    cx: 0
+                    cy: 13 + p.mouth
+                    rx: 2 + p.mouth * 1.3
+                    ry: 0.8 + p.mouth * 2.8
+                    color: "#6b2a2a"
+                }
+                Ell {
+                    visible: p.mouth > 0.08
+                    cx: 0
+                    cy: 13.8 + p.mouth * 2
+                    rx: 1.4 + p.mouth * 0.7
+                    ry: Math.max(0.01, p.mouth * 1.2)
+                    color: "#ff8a9a"
+                }
+            }
+
+            // a tiny laptop while an agent works
+            Item {
+                visible: p.laptop > 0.02
+                opacity: p.laptop
+                y: 30 - 4 * p.laptop
+
+                VPath {
+                    d: "M -15 0 L 15 0 L 17 4 L -17 4 Z"
+                    fill: "#c7cdd8"
+                }
+                Rectangle { x: -13; y: 0.8; width: 26; height: 1.2; color: "#8a93a3" }
+                Rectangle {
+                    x: -11
+                    y: -1.2
+                    width: 22
+                    height: 1.2
+                    color: Qt.alpha(Theme.working, 0.35 + 0.15 * Math.sin(p.t * 5))
+                }
+            }
+        }
+
+        // paws float beside the body; they rise to wave, clap, type, cheer
+        Repeater {
+            model: [-1, 1]
+
+            Item {
+                id: paw
+
+                required property int modelData
+                readonly property real arm: modelData < 0 ? p.armL : p.armR
+
+                x: p.sway + modelData * (38 + p.pawSpread * 20 - arm * 2)
+                y: p.bob + 22 - arm * 24 + Math.sin(p.t * 2 + modelData) * 1.1
+
+                Ell { cx: 0; cy: 0; rx: 5.6; ry: 5.3; color: root.pawCol }
+                // toe beans show when the paw is up
+                Item {
+                    visible: paw.arm > 0.55
+
+                    Ell { cx: 0; cy: 1.2; rx: 2.2; ry: 1.7; color: "#f2b5a8" }
+                    Ell { cx: -2.4; cy: -2.2; rx: 0.9; color: "#f2b5a8" }
+                    Ell { cx: 0; cy: -2.2; rx: 0.9; color: "#f2b5a8" }
+                    Ell { cx: 2.4; cy: -2.2; rx: 0.9; color: "#f2b5a8" }
+                }
+            }
+        }
+    }
+
+    readonly property string squirclePath: {
+        // |x/34|^3 + |(y-4)/28|^3 = 1
+        let d = "";
+        for (let i = 0; i <= 48; i++) {
+            const a = i / 48 * Math.PI * 2;
+            const ca = Math.cos(a), sa = Math.sin(a);
+            const x = 34 * Math.sign(ca) * Math.pow(Math.abs(ca), 2 / 3);
+            const y = 4 + 28 * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / 3);
+            d += `${i ? "L" : "M"} ${x.toFixed(2)} ${y.toFixed(2)} `;
+        }
+        return d + "Z";
+    }
+    readonly property string spiralPath: {
+        let d = "";
+        for (let a = 0; a < Math.PI * 5; a += 0.3) {
+            const r = a * 0.4;
+            d += `${a ? "L" : "M"} ${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)} `;
+        }
+        return d;
     }
 
     Item {
@@ -724,292 +1098,4 @@ Item {
         return Qt.rgba(Math.min(1, col.r * k), Math.min(1, col.g * k), Math.min(1, col.b * k), 1);
     }
 
-    // Built from points: Context2D.ellipse() mangles small ellipses, and Qt
-    // applies the transform at fill time, so a scaled unit arc fails too.
-    function ellipse(c, x, y, rx, ry) {
-        c.beginPath();
-        for (let i = 0; i < 28; i++) {
-            const a = i / 28 * Math.PI * 2;
-            i === 0 ? c.moveTo(x + rx, y) : c.lineTo(x + rx * Math.cos(a), y + ry * Math.sin(a));
-        }
-        c.closePath();
-    }
-
-    // A rounded square: |x/rx|^n + |y/ry|^n = 1
-    function squircle(c, x, y, rx, ry, n) {
-        c.beginPath();
-        for (let i = 0; i <= 48; i++) {
-            const a = i / 48 * Math.PI * 2;
-            const ca = Math.cos(a), sa = Math.sin(a);
-            const px = x + rx * Math.sign(ca) * Math.pow(Math.abs(ca), 2 / n);
-            const py = y + ry * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / n);
-            i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
-        }
-        c.closePath();
-    }
-
-    function draw(c, m, e) {
-        const fur = root.bodyColor;
-        const dark = "#3a2420";
-        const cream = "#fff4e8";
-        const ring = shade(fur, 0.66);
-        const pawCol = shade(fur, 0.5);
-
-        // glow behind, in the mood colour
-        if (p.glow > 0.01) {
-            const g = c.createRadialGradient(0, 4, 8, 0, 4, 52);
-            g.addColorStop(0, Qt.alpha(p.glowColor, p.glow * 0.55));
-            g.addColorStop(1, Qt.alpha(p.glowColor, 0));
-            c.fillStyle = g;
-            ellipse(c, 0, 4, 52, 52);
-            c.fill();
-        }
-
-        // ground shadow: smaller and fainter the higher Emba hops
-        const lift = Math.max(0, -p.bob) / 18;
-        c.fillStyle = `rgba(0,0,0,${0.22 * (1 - lift * 0.5)})`;
-        ellipse(c, p.sway * 0.6, 39, 24 * (1 - lift * 0.35), 3.4 * (1 - lift * 0.35));
-        c.fill();
-
-        c.save();
-        c.translate(p.sway, p.bob);
-        // squash and stretch about the feet
-        c.translate(0, 34);
-        c.scale(p.sx, p.sy);
-        c.translate(0, -34);
-        c.rotate(p.roll + p.spin);
-
-        // tail: a bushy striped curl that swishes behind
-        for (let i = 0; i <= 6; i++) {
-            const k = i / 6;
-            const ang = -0.4 - k * 1.1 + p.tail * k;
-            const tx = 24 + Math.cos(ang) * 6 + k * 13 + Math.sin(p.tail) * k * 6;
-            const ty = 22 - k * 18 + Math.sin(ang) * 2;
-            c.fillStyle = k > 0.85 ? dark : i % 2 === 1 ? ring : fur;
-            ellipse(c, tx, ty, 8.6 - k * 2.2, 8.6 - k * 2.2);
-            c.fill();
-        }
-
-        // feet peeking out at the bottom
-        c.fillStyle = pawCol;
-        for (const sx of [-1, 1]) {
-            ellipse(c, 12 * sx, 33.5, 6, 3.6);
-            c.fill();
-        }
-
-        // ears: round, fluffy cream inside, each twitching on its own
-        for (const sx of [-1, 1]) {
-            const twitch = sx < 0 ? p.earL : p.earR;
-            c.save();
-            c.translate(21 * sx, -18);
-            c.rotate((0.3 + twitch * 0.6) * sx);
-            c.fillStyle = fur;
-            ellipse(c, 0, -2, 9.5, 10);
-            c.fill();
-            c.fillStyle = dark;
-            ellipse(c, 0, -2.2, 5.6, 6.2);
-            c.fill();
-            c.fillStyle = cream;   // fluff at the base
-            ellipse(c, 0, 2.6, 4.6, 2.4);
-            c.fill();
-            c.restore();
-        }
-
-        // body: one soft rounded square with gentle light from the top left
-        squircle(c, 0, 4, 34, 28, 3);
-        const body = c.createRadialGradient(-12, -14, 4, 0, 6, 46);
-        body.addColorStop(0, shade(fur, 1.16));
-        body.addColorStop(0.55, fur);
-        body.addColorStop(1, shade(fur, 0.84));
-        c.fillStyle = body;
-        c.fill();
-        c.save();
-        squircle(c, 0, 4, 34, 28, 3);
-        c.clip();
-        c.fillStyle = "rgba(255,255,255,0.14)";
-        ellipse(c, -8, -19, 22, 6.5);
-        c.fill();
-        c.restore();
-
-        const fx = p.lookX * 6, fy = -p.lookY * 4;
-
-        // red-panda brows: two cream dots
-        c.fillStyle = cream;
-        for (const sx of [-1, 1]) {
-            ellipse(c, 10.5 * sx + fx, -9 + fy, 3.6, 2.5);
-            c.fill();
-        }
-
-        // cream muzzle
-        ellipse(c, fx * 1.05, 11 + fy, 9.5, 6.6);
-        c.fillStyle = cream;
-        c.fill();
-
-        // blush, soft at the edge
-        for (const sx of [-1, 1]) {
-            const bx = 19 * sx + fx, by = 9 + fy;
-            const g = c.createRadialGradient(bx, by, 0.5, bx, by, 5.5);
-            const strong = e === "love" || p.purr > 0;
-            g.addColorStop(0, strong ? "rgba(255,92,138,0.85)" : "rgba(255,140,165,0.6)");
-            g.addColorStop(1, "rgba(255,140,165,0)");
-            c.fillStyle = g;
-            ellipse(c, bx, by, 5.5, 4);
-            c.fill();
-        }
-
-        for (const sx of [-1, 1])
-            drawEye(c, 10.5 * sx + fx, 1.5 + fy, sx, m, e);
-
-        // nose and mouth
-        const nx = fx * 1.1, ny = 8.4 + fy;
-        c.fillStyle = dark;
-        c.beginPath();
-        c.moveTo(nx - 2.4, ny - 1);
-        c.quadraticCurveTo(nx, ny - 1.8, nx + 2.4, ny - 1);
-        c.quadraticCurveTo(nx + 1, ny + 1.6, nx, ny + 1.8);
-        c.quadraticCurveTo(nx - 1, ny + 1.6, nx - 2.4, ny - 1);
-        c.fill();
-        if (p.mouth > 0.08) {
-            c.fillStyle = "#6b2a2a";
-            ellipse(c, nx, ny + 4.6 + p.mouth, 2 + p.mouth * 1.3, 0.8 + p.mouth * 2.8);
-            c.fill();
-            c.fillStyle = "#ff8a9a";   // tongue
-            ellipse(c, nx, ny + 5.4 + p.mouth * 2, 1.4 + p.mouth * 0.7, p.mouth * 1.2);
-            c.fill();
-        } else {
-            // the little "ω"
-            c.strokeStyle = dark;
-            c.lineWidth = 1.1;
-            c.lineCap = "round";
-            c.beginPath();
-            c.moveTo(nx - 3.2, ny + 2.6);
-            c.quadraticCurveTo(nx - 1.6, ny + 4.4, nx, ny + 2.4);
-            c.quadraticCurveTo(nx + 1.6, ny + 4.4, nx + 3.2, ny + 2.6);
-            c.stroke();
-        }
-
-        // a tiny laptop while an agent works
-        if (p.laptop > 0.02) {
-            c.globalAlpha = p.laptop;
-            const ly = 30 - 4 * p.laptop;
-            c.fillStyle = "#c7cdd8";
-            c.beginPath();
-            c.moveTo(-15, ly);
-            c.lineTo(15, ly);
-            c.lineTo(17, ly + 4);
-            c.lineTo(-17, ly + 4);
-            c.closePath();
-            c.fill();
-            c.fillStyle = "#8a93a3";
-            c.fillRect(-13, ly + 0.8, 26, 1.2);
-            // the screen glows back at Emba
-            c.fillStyle = Qt.alpha(Theme.working, 0.35 + 0.15 * Math.sin(p.t * 5));
-            c.fillRect(-11, ly - 1.2, 22, 1.2);
-            c.globalAlpha = 1;
-        }
-
-        c.restore();
-
-        // paws float beside the body; they rise to wave, clap, type, cheer
-        for (const sx of [-1, 1]) {
-            const arm = sx < 0 ? p.armL : p.armR;
-            const x = p.sway + sx * (38 + p.pawSpread * 20 - arm * 2);  // spread < 0 brings paws in
-            const y = p.bob + 22 - arm * 24 + Math.sin(p.t * 2 + sx) * 1.1;
-            c.fillStyle = pawCol;
-            ellipse(c, x, y, 5.6, 5.3);
-            c.fill();
-            if (arm > 0.55) {
-                // toe beans show when the paw is up
-                c.fillStyle = "#f2b5a8";
-                ellipse(c, x, y + 1.2, 2.2, 1.7);
-                c.fill();
-                for (const bx of [-2.4, 0, 2.4]) {
-                    ellipse(c, x + bx, y - 2.2, 0.9, 0.9);
-                    c.fill();
-                }
-            }
-        }
-    }
-
-    function drawEye(c, x, y, sx, m, e) {
-        const ink = "#1e1a24";
-        const sc = p.eyeScale;
-        c.fillStyle = ink;
-        c.strokeStyle = ink;
-        c.lineCap = "round";
-        c.lineWidth = 2.3;
-
-        if (e === "love") {
-            c.fillStyle = "#ff3f73";
-            const r = 3.4 * sc;
-            c.beginPath();
-            c.moveTo(x, y + r * 1.3);
-            c.bezierCurveTo(x - r * 2.2, y - r * 0.2, x - r * 0.9, y - r * 1.9, x, y - r * 0.6);
-            c.bezierCurveTo(x + r * 0.9, y - r * 1.9, x + r * 2.2, y - r * 0.2, x, y + r * 1.3);
-            c.fill();
-            c.fillStyle = "rgba(255,255,255,0.8)";
-            ellipse(c, x - r * 0.6, y - r * 0.4, r * 0.35, r * 0.3);
-            c.fill();
-            return;
-        }
-        if (e === "dizzy") {
-            c.lineWidth = 1.6;
-            c.beginPath();
-            for (let a = 0; a < Math.PI * 5; a += 0.3) {
-                const r = a * 0.4;
-                const px = x + Math.cos(a + p.t * 9 * sx) * r, py = y + Math.sin(a + p.t * 9 * sx) * r;
-                a === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
-            }
-            c.stroke();
-            return;
-        }
-        if (m === "error" && !e) {
-            const r = 3.2;
-            c.beginPath();
-            c.moveTo(x - r, y - r); c.lineTo(x + r, y + r);
-            c.moveTo(x + r, y - r); c.lineTo(x - r, y + r);
-            c.stroke();
-            return;
-        }
-        if (e === "happy" || (m === "done" && !e) || (p.act === "dance")) {
-            c.beginPath();
-            c.arc(x, y + 2, 3.8, Math.PI * 1.15, Math.PI * 1.85);
-            c.stroke();
-            return;
-        }
-        if (e === "annoyed") {
-            c.beginPath();
-            c.moveTo(x - 3.6 * sx, y - 2.8);
-            c.lineTo(x + 3.2 * sx, y);
-            c.lineTo(x - 3.6 * sx, y + 2.8);
-            c.stroke();
-            return;
-        }
-
-        const open = p.eyeOpen;
-        if (open < 0.15) {
-            // shut: a soft downward curve with a lash
-            c.beginPath();
-            c.arc(x, y - 1, 3.6, Math.PI * 0.15, Math.PI * 0.85);
-            c.stroke();
-            return;
-        }
-        const rx = 3.9 * sc, ry = 5.4 * sc * open;
-        ellipse(c, x, y, rx, ry);
-        c.fill();
-        // a hint of colour low in the eye, then two catchlights
-        c.fillStyle = "rgba(120,80,60,0.25)";
-        ellipse(c, x, y + ry * 0.55, rx * 0.55, ry * 0.25);
-        c.fill();
-        c.fillStyle = "white";
-        ellipse(c, x + 1.1 * sc, y - ry * 0.42, 1.25 * sc, 1.45 * sc * Math.min(1, open * 1.5));
-        c.fill();
-        ellipse(c, x - 1.2 * sc, y + ry * 0.38, 0.6 * sc, 0.6 * sc);
-        c.fill();
-        // tired: a flat lid across the top
-        if ((m === "limit" || m === "sleepy") && !e) {
-            c.fillStyle = root.bodyColor;
-            c.fillRect(x - rx - 1, y - ry - 1, rx * 2 + 2, ry * 0.9);
-        }
-    }
 }

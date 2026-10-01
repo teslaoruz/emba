@@ -429,6 +429,7 @@ Item {
                 running: root.mode !== "hidden"
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
+                fps: root.mode === "expanded" ? 24 : 12
                 eager: root.dragging
                 bodyColor: App.cfg.color
 
@@ -745,15 +746,34 @@ Item {
         }
     }
 
-    Process {
-        running: cursor.wanted && !cursor.hostCursor && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
-        command: ["sh", "-c", "while hyprctl cursorpos; do sleep 0.08; done"]
-        stdout: SplitParser {
+    // Asked straight over Hyprland's own socket: no process per question,
+    // which is what made this expensive when it ran hyprctl in a loop.
+    readonly property string hyprSocket: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ? `${Quickshell.env("XDG_RUNTIME_DIR")}/hypr/${Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")}/.socket.sock` : ""
+
+    Socket {
+        id: hypr
+
+        path: root.hyprSocket
+        onConnectedChanged: if (connected) {
+            write("cursorpos");
+            flush();
+        }
+        parser: SplitParser {
             onRead: line => {
                 const m = line.match(/(-?\d+),\s*(-?\d+)/);
                 if (m)
                     cursor.aim(+m[1], +m[2]);
             }
+        }
+    }
+    Timer {
+        // quicker while shaking could happen or the island is open, slower otherwise
+        running: cursor.wanted && !cursor.hostCursor && root.hyprSocket !== ""
+        interval: root.mode === "expanded" || root.mode === "peek" ? 70 : 110
+        repeat: true
+        onTriggered: {
+            hypr.connected = false;
+            hypr.connected = true;
         }
         onRunningChanged: if (!running)
             cursor.gaze = null
@@ -989,6 +1009,8 @@ Item {
         property real value: 1
 
         SequentialAnimation on value {
+            // only while the island is open: an endless animation keeps the whole window redrawing
+            running: root.mode === "expanded" && App.asking
             loops: Animation.Infinite
             NumberAnimation { to: 0.5; duration: 1100; easing.type: Easing.InOutSine }
             NumberAnimation { to: 1; duration: 1100; easing.type: Easing.InOutSine }
@@ -1030,7 +1052,7 @@ Item {
                         height: 7
                         radius: 4
                         color: App.stateColours[srow.modelData.state] ?? Theme.dim
-                        opacity: ["working", "thinking", "waiting"].includes(srow.modelData.state) ? shimmer.value : 1
+                        // still: an endless pulse here kept the whole island redrawing
                     }
 
                     Column {
