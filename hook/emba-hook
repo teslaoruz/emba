@@ -1,62 +1,93 @@
 #!/usr/bin/env python3
-"""Claude Code hook for emba. Standard library only.
+"""Coding-agent hook for Emba. Standard library only, any OS.
 
-Forwards each hook event to emba over a Unix socket. For PermissionRequest it
-stays connected and waits for emba to answer.
+Forwards each hook event to Emba over a local socket (a named pipe on
+Windows). For permission requests it stays connected and waits for an answer.
 
-emba not running, slow, or gone -> exit 0 with no output, and Claude Code
+Emba not running, slow, or gone -> exit 0 with no output, and the agent
 carries on exactly as if this hook did not exist. A hook that prints nothing
-never decides a permission, so every failure here falls back to the normal
+never decides a permission, so every failure falls back to the normal
 terminal prompt.
 
-    emba-hook                      as a hook: payload on stdin
-    emba-hook statusline [CMD]     as the statusLine: forwards the rate limits,
-                                    then runs CMD (your old statusline) with the
-                                    same stdin and prints what it prints
+    emba-hook [--agent claude|codex|gemini]   as a hook: payload on stdin
+    emba-hook statusline [CMD]                as Claude Code's statusLine: forwards
+                                              the rate limits, then runs CMD (your
+                                              old statusline) with the same stdin
 """
 
+import getpass
 import json
 import os
 import socket
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-SOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}") / "emba.sock"
 CONNECT_TIMEOUT = 0.3
-DECISION_TIMEOUT = 570  # Claude Code kills PermissionRequest hooks at 600 s
+DECISION_TIMEOUT = 570  # agents kill permission hooks at 600 s
+
+
+def address():
+    """Where Emba listens. Must match App.qml / the desktop host."""
+    if os.name == "nt":
+        return rf"\\.\pipe\emba-{getpass.getuser()}"
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    return str(Path(base) / ("emba.sock" if os.environ.get("XDG_RUNTIME_DIR") else f"emba-{os.getuid()}.sock"))
+
+
+class Pipe:
+    """Windows named pipe with the bits of the socket API we use."""
+
+    def __init__(self, path):
+        self.f = open(path, "r+b", buffering=0)
+
+    def sendall(self, data):
+        self.f.write(data)
+
+    def recv(self, n):
+        return self.f.read(n)
+
+    def settimeout(self, t):
+        pass  # a pipe read blocks until Emba answers or closes; the agent's own timeout bounds it
+
+    def close(self):
+        self.f.close()
 
 
 def connect():
+    if os.name == "nt":
+        return Pipe(address())
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(CONNECT_TIMEOUT)
-    s.connect(str(SOCK))
+    s.connect(address())
     return s
 
 
 def send(msg, wait=False):
-    """Send one JSON line; with wait, return emba's one-line JSON reply."""
+    """Send one JSON line; with wait, return Emba's one-line JSON reply."""
     try:
         s = connect()
     except OSError:
         return None
-    with s:
-        try:
-            s.sendall((json.dumps(msg) + "\n").encode())
-            if not wait:
-                return None
-            s.settimeout(DECISION_TIMEOUT)
-            buf = b""
-            while not buf.endswith(b"\n"):
-                chunk = s.recv(4096)
-                if not chunk:
-                    return None  # emba closed on us: answered elsewhere
-                buf += chunk
-                if len(buf) > 65536:
-                    return None
-            return json.loads(buf)
-        except (OSError, ValueError):
+    try:
+        s.sendall((json.dumps(msg) + "\n").encode())
+        if not wait:
             return None
+        s.settimeout(DECISION_TIMEOUT)
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(4096)
+            if not chunk:
+                return None  # Emba closed on us: answered elsewhere
+            buf += chunk
+            if len(buf) > 65536:
+                return None
+        return json.loads(buf)
+    except (OSError, ValueError):
+        return None
+    finally:
+        s.close()
 
 
 def target(tool, args):
@@ -130,25 +161,44 @@ def statusline(argv):
         sys.stdout.buffer.write(out.stdout)
 
 
+# Each agent's event names, mapped onto Emba's (which are Claude Code's).
+# Codex already uses the same names and output format.
+GEMINI = {"BeforeAgent": "UserPromptSubmit", "BeforeTool": "PreToolUse", "AfterAgent": "Stop"}
+
+
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "statusline":
-        return statusline(sys.argv[2:])
+    argv = sys.argv[1:]
+    if argv[:1] == ["statusline"]:
+        return statusline(argv[1:])
+    agent = argv[argv.index("--agent") + 1] if "--agent" in argv[:-1] else "claude"
     try:
         p = json.load(sys.stdin)
     except ValueError:
         return
     ev = p.get("hook_event_name", "")
+    if agent == "gemini":
+        if ev == "Notification" and p.get("notification_type") == "ToolPermission":
+            ev = "Attention"  # Gemini cannot be answered from a hook: point at the terminal
+        else:
+            ev = GEMINI.get(ev, ev)
+        p.setdefault("last_assistant_message", p.get("prompt_response", ""))
+        print("{}")  # Gemini parses stdout as JSON; {} decides nothing
     tool = p.get("tool_name", "")
     args = p.get("tool_input") or {}
+    if isinstance(args.get("command"), list):  # Codex passes argv
+        args = {**args, "command": " ".join(map(str, args["command"]))}
     msg = {
         "ev": ev,
-        "sid": p.get("session_id", ""),
-        "cwd": p.get("cwd", ""),
+        "agent": agent,
+        "sid": f"{agent}-{p.get('session_id', '')}" if agent != "claude" else p.get("session_id", ""),
+        "cwd": p.get("cwd", "") or os.getcwd(),
         "pid": os.getppid(),
         "tool": tool,
         "target": target(tool, args)[:300],
     }
-    if ev == "SessionStart":
+    if ev == "Attention":
+        msg["text"] = p.get("message", "")
+    elif ev == "SessionStart":
         msg["win"] = hypr_window(os.getppid())
     elif ev == "UserPromptSubmit":
         msg["target"] = (p.get("prompt") or "")[:300]
@@ -158,7 +208,7 @@ def main():
         msg["text"] = p.get("last_assistant_message") or last_reply(p.get("transcript_path", ""))
     elif ev == "PermissionRequest":
         suggestions = p.get("permission_suggestions") or []
-        msg.update(id=p.get("tool_use_id", ""), full=target(tool, args) if tool == "Bash" else json.dumps(args, indent=1)[:2000],
+        msg.update(id=p.get("tool_use_id") or f"{agent}-{os.getpid()}", full=target(tool, args) if tool == "Bash" else json.dumps(args, indent=1)[:2000],
                    always=bool(suggestions),
                    rule=", ".join(r for s in suggestions if isinstance(s, dict) for r in (s.get("rules") or []))[:200])
         reply = send(msg, wait=True)

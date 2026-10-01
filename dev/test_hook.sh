@@ -26,6 +26,19 @@ echo "$out" | grep -q '"behavior": "deny"' || fail "deny: $out"
 out=$(echo "$req" | sed 's/toolu_1/toolu_3/' | $H); wait
 [ -z "$out" ] || fail "cancel printed: $out"
 
+# Codex: same protocol, argv-style command, no tool_use_id
+echo '{"hook_event_name":"SessionStart","session_id":"cx","cwd":"/tmp/cx"}' | $H --agent codex
+(sleep 1; ipc allow > /dev/null) &
+out=$(echo '{"hook_event_name":"PermissionRequest","session_id":"cx","cwd":"/tmp/cx","tool_name":"Bash","tool_input":{"command":["rm","-rf","dist"]},"turn_id":"t1"}' | $H --agent codex); wait
+echo "$out" | grep -q '"behavior": "allow"' || fail "codex allow: $out"
+ipc state | grep -q '"agent":"codex"' || fail "codex session not tagged"
+
+# Gemini: renamed events, must always print JSON, permission asks show as attention
+out=$(echo '{"hook_event_name":"BeforeAgent","session_id":"gm","cwd":"/tmp/gm","prompt":"hi"}' | $H --agent gemini)
+[ "$out" = "{}" ] || fail "gemini stdout: $out"
+echo '{"hook_event_name":"Notification","session_id":"gm","cwd":"/tmp/gm","notification_type":"ToolPermission","message":"Allow shell?"}' | $H --agent gemini > /dev/null
+ipc state | grep -q '"sid":"gemini-gm"[^}]*"state":"waiting"' || ipc state | grep -q '"state":"waiting"[^}]*"sid":"gemini-gm"' || fail "gemini attention not waiting: $(ipc state)"
+
 # emba not running: instant, silent
 sh dev/run.sh stop
 start=$(date +%s%N)

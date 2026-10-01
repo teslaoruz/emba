@@ -24,7 +24,8 @@ Singleton {
             collapseDelay: 1200,     // ms after the cursor leaves
             trackCursor: true,       // eyes follow the cursor everywhere (Hyprland)
             limitWarn: 80,           // % of a usage window that triggers a warning
-            askModel: "",            // claude -p --model, "" = your default
+            askWith: "auto",         // claude gemini opencode codex ollama; auto = first installed
+            askModel: "",            // model for the ask box, "" = the tool's default
             focusCommand: [],        // argv; {window} {pid} {cwd} are filled in
             theme: "auto"            // auto caelestia pywal custom default
         })
@@ -75,6 +76,9 @@ Singleton {
     // `bin/emba` does the real work (hooks, autostart); settings call it.
     readonly property string emba: `${Quickshell.shellDir}/bin/emba`
     property var status: ({})
+    readonly property string python: Qt.platform.os === "windows" ? "python" : "python3"
+    // any agent hooked up yet? (undefined until the first status arrives)
+    readonly property var connected: status.agents ? Object.values(status.agents).some(a => a.connected) : undefined
     property bool busy: false
     property bool settingsOpen: false
 
@@ -87,14 +91,14 @@ Singleton {
         if (busy)
             return;
         busy = true;
-        actionProc.command = ["sh", emba].concat(args);
+        actionProc.command = [python, emba].concat(args);
         actionProc.running = true;
     }
 
     Process {
         id: statusProc
 
-        command: ["sh", root.emba, "status", "--json"]
+        command: [root.python, root.emba, "status", "--json"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -147,6 +151,13 @@ Singleton {
         } catch (e) {
             return;
         }
+        if (m.ev === "ipc") {
+            sock.write(JSON.stringify({
+                reply: String(command(m.cmd, m.args))
+            }) + "\n");
+            sock.flush();
+            return;
+        }
         if (m.ev === "Limits")
             return updateLimits(m);
         if (!m.sid || !/^[A-Za-z0-9_-]{1,128}$/.test(m.sid))
@@ -169,7 +180,8 @@ Singleton {
             text: ""
         };
         s.cwd = m.cwd || s.cwd || "";
-        s.name = s.cwd.split("/").filter(x => x).pop() || "~";
+        s.name = s.cwd.split(/[\\/]/).filter(x => x).pop() || "~";
+        s.agent = m.agent || s.agent || "claude";
         s.pid = s.pid || m.pid;
         s.win = m.win || s.win || "";
         s.ts = Date.now();
@@ -190,6 +202,12 @@ Singleton {
         case "PreToolUse":
             s.state = "working";
             push(`${m.tool} ${m.target}`.trim());
+            break;
+        case "Attention":
+            // the agent asked in its own terminal and cannot be answered from here
+            s.state = "waiting";
+            s.text = m.text ?? "";
+            push(`needs you: ${m.text ?? ""}`);
             break;
         case "Notification":
             if (/waiting for your input/i.test(m.text ?? ""))
@@ -212,6 +230,7 @@ Singleton {
                     always: !!m.always,
                     rule: m.rule ?? "",
                     name: s.name,
+                    agent: s.agent,
                     sock: sock
                 }]);
             sock.pendingId = m.id;
@@ -353,28 +372,60 @@ Singleton {
     }
 
     // ------------------------------------------------------------------ ask
-    // Runs on the user's own Claude plan through the CLI: no API key.
+    // Runs through a CLI the user already has, on their own account: no API
+    // keys here. Free choices: gemini (free tier), opencode (free models),
+    // ollama (local).
     property bool asking: false
     property string answer: ""
     property string askError: ""
+    property string errText: ""
+    property var askCode: null
+
+    readonly property var askTools: ["claude", "gemini", "opencode", "codex", "ollama"]
+    readonly property string askTool: {
+        const want = cfg.askWith ?? "auto";
+        const have = status.ask ?? [];
+        if (want !== "auto")
+            return want;
+        return askTools.find(t => have.includes(t)) ?? "claude";
+    }
+    readonly property string askLabel: ({
+            claude: "Claude",
+            gemini: "Gemini",
+            opencode: "opencode",
+            codex: "Codex",
+            ollama: "Ollama"
+        })[askTool] ?? askTool
+
+    function askCommand(tool, text, files) {
+        const m = cfg.askModel;
+        const dirs = [...new Set((files ?? []).map(f => f.replace(/[\\/][^\\/]*$/, "") || "/"))];
+        switch (tool) {
+        case "gemini":
+            return ["gemini", "-p", text].concat(m ? ["-m", m] : [], dirs.length ? ["--include-directories", dirs.join(",")] : []);
+        case "opencode":
+            return ["opencode", "run", text].concat(m ? ["-m", m] : []);
+        case "codex":
+            return ["codex", "exec", "--skip-git-repo-check", text].concat(m ? ["-m", m] : []);
+        case "ollama":
+            return ["ollama", "run", m || "llama3.2", text];
+        default:
+            return ["claude", "-p", text].concat(m ? ["--model", m] : [], dirs.flatMap(d => ["--add-dir", d]), files?.length ? ["--allowedTools", "Read"] : []);
+        }
+    }
 
     function ask(prompt, files) {
         if (!prompt.trim() || asking)
             return;
-        const dirs = [...new Set((files ?? []).map(f => f.replace(/\/[^/]*$/, "") || "/"))];
         const text = files?.length ? `Files:\n${files.join("\n")}\n\n${prompt}` : prompt;
-        let cmd = ["claude", "-p", text];
-        if (cfg.askModel)
-            cmd = cmd.concat(["--model", cfg.askModel]);
-        for (const d of dirs)
-            cmd = cmd.concat(["--add-dir", d]);
-        if (files?.length)
-            cmd = cmd.concat(["--allowedTools", "Read"]);
         answer = "";
         askError = "";
+        errText = "";
+        askCode = null;
         asking = true;
-        askProc.command = cmd;
-        askProc.workingDirectory = sessions[0]?.cwd || Quickshell.env("HOME");
+        askProc.command = askCommand(askTool, text, files);
+        // tools without an --add-dir style flag read files relative to here
+        askProc.workingDirectory = files?.length === 1 ? files[0].replace(/[\\/][^\\/]*$/, "") : (sessions[0]?.cwd || Quickshell.env("HOME") || Quickshell.env("USERPROFILE"));
         askProc.running = true;
     }
 
@@ -389,14 +440,19 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: root.answer = text.trim()
         }
+        // stderr is only an error if the tool failed; many print progress there
         stderr: StdioCollector {
-            onStreamFinished: if (text.trim())
-                root.askError = text.trim().split("\n").pop()
+            onStreamFinished: {
+                root.errText = text.trim().split("\n").pop() ?? "";
+                if (root.askCode !== null && root.askCode !== 0 && root.errText)
+                    root.askError = root.errText;
+            }
         }
         onExited: code => {
+            root.askCode = code;
             root.asking = false;
-            if (code !== 0 && !root.askError)
-                root.askError = `claude exited with ${code}`;
+            if (code !== 0)
+                root.askError = root.errText || `${root.askTool} exited with ${code}`;
         }
     }
 
@@ -404,41 +460,41 @@ Singleton {
     signal toggleRequested
     signal askRequested
 
-    IpcHandler {
-        target: "emba"
-
-        function toggle(): void {
+    // One entry point for every remote command, whether it arrives over the
+    // socket (the `emba` CLI, any OS) or Quickshell's IPC (keybinds on Linux).
+    function command(cmd, args) {
+        switch (cmd) {
+        case "toggle":
             root.toggleRequested();
-        }
-        function settings(): void {
+            return "ok";
+        case "ask":
+            root.askRequested();
+            return "ok";
+        case "settings":
             root.settingsOpen = true;
             root.refreshStatus();
-        }
-        // emba set position top-left · emba set scale 1.2 · emba set celebrate false
-        function set(key: string, value: string): string {
-            if (!(key in root.defaults))
-                return `unknown setting: ${key}`;
-            let v = value;
-            try {
-                v = JSON.parse(value);
-            } catch (e) {}
-            root.setCfg({
-                [key]: v
-            });
             return "ok";
-        }
-        function ask(): void {
-            root.askRequested();
-        }
-        function allow(): void {
-            if (root.pending.length)
-                root.decide(root.pending[0].id, "allow", false);
-        }
-        function deny(): void {
-            if (root.pending.length)
-                root.decide(root.pending[0].id, "deny", false);
-        }
-        function state(): string {
+        case "allow":
+        case "deny":
+            if (!root.pending.length)
+                return "nothing is waiting";
+            root.decide(root.pending[0].id, cmd, false);
+            return "ok";
+        case "set":
+            {
+                const [key, value] = args ?? [];
+                if (!(key in root.defaults))
+                    return `unknown setting: ${key}`;
+                let v = value;
+                try {
+                    v = JSON.parse(value);
+                } catch (e) {}
+                root.setCfg({
+                    [key]: v
+                });
+                return "ok";
+            }
+        case "state":
             return JSON.stringify({
                 sessions: root.sessions,
                 pending: root.pending.map(p => ({
@@ -447,6 +503,37 @@ Singleton {
                             name: p.name
                         }))
             });
+        case "quit":
+            Qt.callLater(Qt.quit);
+            return "ok";
+        }
+        return `unknown command: ${cmd}`;
+    }
+
+    IpcHandler {
+        target: "emba"
+
+        function toggle(): string {
+            return root.command("toggle");
+        }
+        function settings(): string {
+            return root.command("settings");
+        }
+        // emba set position top-left · emba set scale 1.2 · emba set celebrate false
+        function set(key: string, value: string): string {
+            return root.command("set", [key, value]);
+        }
+        function ask(): string {
+            return root.command("ask");
+        }
+        function allow(): string {
+            return root.command("allow");
+        }
+        function deny(): string {
+            return root.command("deny");
+        }
+        function state(): string {
+            return root.command("state");
         }
     }
 }

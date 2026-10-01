@@ -1,138 +1,295 @@
-#!/bin/sh
-# emba: a red panda that keeps an eye on your Claude Code sessions.
-set -eu
+#!/usr/bin/env python3
+"""emba: a red panda that keeps an eye on your coding agents.
 
-self=$(readlink -f "$0")
-app=$(dirname "$(dirname "$self")")
-unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/emba.service"
-
-usage() {
-    cat <<EOF
 usage: emba [command]
 
-  start               start Emba in the background (default)
-  quit                stop it
-  restart             stop, then start
-  settings            open the settings window
-  toggle | ask        open or close the island / open the ask box
-  allow | deny        answer the oldest permission request
-  set KEY VALUE       change a setting, e.g. set position top-left
+  start                 start Emba in the background (default)
+  quit | restart        stop it / stop and start
+  settings              open the settings window
+  toggle | ask          open or close the island / open the ask box
+  allow | deny          answer the oldest permission request
+  set KEY VALUE         change a setting, e.g. emba set position top-left
 
-  connect [--statusline]   add Emba's hooks to Claude Code (shows the diff first)
-  disconnect               remove them again
-  autostart on|off         start Emba with your graphical session (systemd)
+  connect [AGENT ...] [--statusline]
+                        hook Emba into claude, codex, gemini, opencode
+                        (default: every one installed; shows each diff first)
+  disconnect [AGENT ...]
+  autostart on|off      start Emba when you log in
 
-  status [--json]     what is running and connected
-  doctor              check everything Emba needs
-  run                 run in the foreground (what autostart uses)
-EOF
-}
+  status [--json]       what is running and connected
+  doctor                check everything Emba needs
+  run                   run in the foreground (what autostart uses)
+"""
 
-ipc() { qs -p "$app" ipc call emba "$@"; }
-running() { qs -p "$app" ipc call emba state > /dev/null 2>&1; }
-autostart_on() { [ -f "$unit" ] && systemctl --user is-enabled emba.service > /dev/null 2>&1; }
+import importlib.util
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import time
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
 
-start() {
-    if running; then
-        echo "Emba is already running"
-    elif autostart_on; then
-        systemctl --user start emba.service
-    else
-        # setsid: keep running after the launching terminal closes
-        setsid qs -p "$app" > /dev/null 2>&1 < /dev/null &
-        sleep 1
-        running && echo "Emba is running" || { echo "Emba failed to start; try: emba run"; exit 1; }
-    fi
-}
+APP = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(APP / "hook"))
+import hooks  # noqa: E402
 
-quit() {
-    if autostart_on && systemctl --user is-active emba.service > /dev/null 2>&1; then
-        systemctl --user stop emba.service
-    else
-        qs kill -p "$app" > /dev/null 2>&1 || true
-    fi
-}
 
-hooks() {
-    # interactive: show the diff and ask; from the settings window: --yes
-    if [ -t 0 ]; then python3 "$app/hook/hooks.py" "$@"; else python3 "$app/hook/hooks.py" "$@" --yes; fi
-}
+def _load_hook():
+    # emba-hook has no .py suffix (agents run it directly), so load it by path
+    loader = SourceFileLoader("emba_hook", str(APP / "hook" / "emba-hook"))
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("emba_hook", loader))
+    loader.exec_module(mod)
+    return mod
 
-status_json() {
-    h=$(python3 "$app/hook/hooks.py" status)
-    r=false; running && r=true
-    a=false; autostart_on && a=true
-    printf '{"running": %s, "autostart": %s, %s\n' "$r" "$a" "${h#\{}"
-}
 
-doctor() {
-    ok=true
-    check() { if eval "$2" > /dev/null 2>&1; then echo "  ok    $1"; else echo "  $3  $1${4:+  ($4)}"; if [ "$3" = "MISS" ]; then ok=false; fi; fi; }
-    echo "Emba at $app"
-    check "quickshell (qs)" "command -v qs" MISS "install quickshell"
-    check "python3" "command -v python3" MISS
-    check "claude (Claude Code)" "command -v claude" MISS "https://code.claude.com"
-    check "running" running "    " "emba start"
-    check "hooks in Claude Code" "python3 '$app/hook/hooks.py' status | grep -q '\"hooks\": true'" MISS "emba connect"
-    check "usage limits (statusline)" "python3 '$app/hook/hooks.py' status | grep -q '\"statusline\": true'" "    " "emba connect --statusline"
-    check "wl-copy (copy buttons)" "command -v wl-copy" "    " "install wl-clipboard"
-    check "Hyprland (jump to terminal, eye tracking)" '[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]' "    " "set focusCommand for other compositors"
-    $ok && echo "All good." || { echo "Something Emba needs is missing."; exit 1; }
-}
+hook = _load_hook()
+SYSTEM = platform.system()  # Linux, Darwin, Windows
+ASK_TOOLS = ["claude", "gemini", "opencode", "codex", "ollama"]
 
-cmd=${1:-start}
-[ $# -gt 0 ] && shift
-case "$cmd" in
-start) start ;;
-quit | stop) quit ;;
-restart) quit; sleep 0.5; start ;;
-run) exec qs -p "$app" ;;
-set)
-    running || start > /dev/null
-    ipc set "$@"
-    ;;
-settings | toggle | ask | allow | deny)
-    running || start > /dev/null
-    ipc "$cmd" > /dev/null
-    ;;
-connect) hooks install "$@" ;;
-disconnect) hooks uninstall ;;
-autostart)
-    case "${1:-}" in
-    on)
-        mkdir -p "$(dirname "$unit")"
-        cat > "$unit" <<EOF
-[Unit]
-Description=Emba, a red panda that watches your Claude Code sessions
-PartOf=graphical-session.target
-After=graphical-session.target
 
-[Service]
-ExecStart=$self run
-Restart=on-failure
-RestartSec=2
+# ---------------------------------------------------------------- talking to the app
 
-[Install]
-WantedBy=graphical-session.target
-EOF
-        systemctl --user daemon-reload
-        qs kill -p "$app" > /dev/null 2>&1 || true
-        systemctl --user enable --now emba.service > /dev/null
-        echo "Emba starts with your session"
-        ;;
-    off)
-        systemctl --user disable --now emba.service > /dev/null 2>&1 || true
-        rm -f "$unit"
-        systemctl --user daemon-reload
-        echo "autostart off"
-        ;;
-    *) usage; exit 2 ;;
-    esac
-    ;;
-status)
-    if [ "${1:-}" = "--json" ]; then status_json; else status_json | tr -d '{}"' | tr ',' '\n' | sed 's/^ *//'; fi
-    ;;
-doctor) doctor ;;
--h | --help | help) usage ;;
-*) usage; exit 2 ;;
-esac
+def ipc(cmd, *args, timeout=2.0):
+    """Send a command to the running app; None if it is not running."""
+    try:
+        s = hook.connect()
+    except OSError:
+        return None
+    try:
+        s.settimeout(timeout)
+        s.sendall((json.dumps({"ev": "ipc", "cmd": cmd, "args": list(args)}) + "\n").encode())
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        return json.loads(buf).get("reply") if buf else None
+    except (OSError, ValueError):
+        return None
+    finally:
+        s.close()
+
+
+def running():
+    return ipc("state", timeout=1.0) is not None
+
+
+# ---------------------------------------------------------------- which host
+
+def use_quickshell():
+    """Quickshell on Wayland compositors with layer-shell; the Qt host everywhere else."""
+    forced = os.environ.get("EMBA_HOST")
+    if forced:
+        return forced == "quickshell"
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+    return SYSTEM == "Linux" and bool(os.environ.get("WAYLAND_DISPLAY")) and shutil.which("qs") is not None \
+        and "gnome" not in desktop
+
+
+def host_command():
+    if use_quickshell():
+        return ["qs", "-p", str(APP)]
+    py = sys.executable
+    if SYSTEM == "Windows" and py.lower().endswith("python.exe"):
+        py = py[:-len("python.exe")] + "pythonw.exe"  # no console window
+    return [py, str(APP / "desktop" / "host.py")]
+
+
+def start():
+    if running():
+        print("Emba is already running")
+        return
+    if autostart_state() and SYSTEM == "Linux" and shutil.which("systemctl"):
+        subprocess.run(["systemctl", "--user", "start", "emba.service"])
+    else:
+        kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if SYSTEM == "Windows":
+            kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        else:
+            kw["start_new_session"] = True
+        subprocess.Popen(host_command(), **kw)
+    for _ in range(40):
+        time.sleep(0.15)
+        if running():
+            print("Emba is running")
+            return
+    sys.exit("Emba did not start; run `emba run` to see why")
+
+
+# ---------------------------------------------------------------- autostart
+
+def run_line():
+    return [sys.executable, str(Path(__file__).resolve()), "run"]
+
+
+def autostart_path():
+    if SYSTEM == "Darwin":
+        return Path.home() / "Library" / "LaunchAgents" / "dev.emba.plist"
+    if SYSTEM == "Linux":
+        if shutil.which("systemctl"):
+            return hooks.config_home() / "systemd" / "user" / "emba.service"
+        return hooks.config_home() / "autostart" / "emba.desktop"
+    return None
+
+
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+
+def autostart_state():
+    if SYSTEM == "Windows":
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+                winreg.QueryValueEx(k, "Emba")
+                return True
+        except OSError:
+            return False
+    p = autostart_path()
+    return bool(p and p.exists())
+
+
+def autostart(on):
+    if SYSTEM == "Windows":
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+            if on:
+                winreg.SetValueEx(k, "Emba", 0, winreg.REG_SZ, subprocess.list2cmdline(run_line()))
+            else:
+                try:
+                    winreg.DeleteValue(k, "Emba")
+                except OSError:
+                    pass
+    else:
+        p = autostart_path()
+        line = " ".join(f'"{a}"' for a in run_line())
+        if SYSTEM == "Darwin":
+            if on:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                args = "".join(f"<string>{a}</string>" for a in run_line())
+                p.write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
+                             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+                             '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+                             f'<plist version="1.0"><dict><key>Label</key><string>dev.emba</string>'
+                             f"<key>ProgramArguments</key><array>{args}</array>"
+                             "<key>RunAtLoad</key><true/></dict></plist>\n")
+            else:
+                p.unlink(missing_ok=True)
+        elif p.suffix == ".service":
+            if on:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("[Unit]\nDescription=Emba, a red panda that watches your coding agents\n"
+                             "PartOf=graphical-session.target\nAfter=graphical-session.target\n\n"
+                             f"[Service]\nExecStart={line}\nRestart=on-failure\nRestartSec=2\n\n"
+                             "[Install]\nWantedBy=graphical-session.target\n")
+                subprocess.run(["systemctl", "--user", "daemon-reload"])
+                ipc("quit")  # hand over to systemd
+                time.sleep(0.5)
+                subprocess.run(["systemctl", "--user", "enable", "--now", "emba.service"], capture_output=True)
+            else:
+                subprocess.run(["systemctl", "--user", "disable", "emba.service"], capture_output=True)
+                p.unlink(missing_ok=True)
+                subprocess.run(["systemctl", "--user", "daemon-reload"])
+        else:
+            if on:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(f"[Desktop Entry]\nType=Application\nName=Emba\nExec={line}\n")
+            else:
+                p.unlink(missing_ok=True)
+    print("autostart", "on" if on else "off")
+
+
+# ---------------------------------------------------------------- status
+
+def status():
+    return {
+        "running": running(),
+        "autostart": autostart_state(),
+        "host": "quickshell" if use_quickshell() else "qt",
+        "agents": hooks.status(),
+        "ask": [t for t in ASK_TOOLS if shutil.which(t)],
+    }
+
+
+def doctor():
+    st = status()
+    ok = True
+
+    def line(good, what, hint="", required=True):
+        nonlocal ok
+        mark = "ok  " if good else ("MISS" if required else "    ")
+        print(f"  {mark}  {what}" + (f"  ({hint})" if hint and not good else ""))
+        if required and not good:
+            ok = False
+
+    print(f"Emba at {APP}  ({SYSTEM}, {st['host']} host)")
+    if st["host"] == "quickshell":
+        line(bool(shutil.which("qs")), "quickshell", "install quickshell")
+    else:
+        line(importlib.util.find_spec("PySide6") is not None, "PySide6", "pip install PySide6")
+    line(st["running"], "running", "emba start", required=False)
+    agents = st["agents"]
+    found = [a for a, v in agents.items() if v["installed"]]
+    line(bool(found), "a coding agent", "install claude, codex, gemini or opencode")
+    for a in found:
+        line(agents[a]["connected"], f"{a} connected", f"emba connect {a}", required=False)
+    line(bool(st["ask"]), "something for the ask box", "any of: " + ", ".join(ASK_TOOLS), required=False)
+    if SYSTEM == "Linux":
+        line(bool(shutil.which("wl-copy") or shutil.which("xclip")), "clipboard tool (copy buttons)",
+             "install wl-clipboard", required=False)
+    print("All good." if ok else "Something Emba needs is missing.")
+    return ok
+
+
+# ---------------------------------------------------------------- main
+
+def main():
+    args = sys.argv[1:]
+    cmd = args[0] if args else "start"
+    rest = args[1:]
+    if cmd in ("-h", "--help", "help"):
+        print(__doc__)
+    elif cmd == "start":
+        start()
+    elif cmd in ("quit", "stop"):
+        if ipc("quit") is None:
+            print("Emba is not running")
+    elif cmd == "restart":
+        ipc("quit")
+        time.sleep(0.6)
+        start()
+    elif cmd == "run":
+        c = host_command()
+        sys.exit(subprocess.call(c))
+    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state"):
+        if not running():
+            start()
+        reply = ipc(cmd, *rest)
+        if reply and reply != "ok":
+            print(reply)
+    elif cmd in ("connect", "disconnect"):
+        flags = rest + ([] if sys.stdin.isatty() else ["--yes"])
+        sys.argv = ["hooks.py", "install" if cmd == "connect" else "uninstall"] + flags
+        hooks.main()
+    elif cmd == "autostart" and rest[:1] in (["on"], ["off"]):
+        autostart(rest[0] == "on")
+    elif cmd == "status":
+        st = status()
+        if rest[:1] == ["--json"]:
+            print(json.dumps(st))
+        else:
+            print(f"running: {st['running']}\nautostart: {st['autostart']}\nhost: {st['host']}")
+            for a, v in st["agents"].items():
+                print(f"{a}: {'connected' if v['connected'] else 'installed' if v['installed'] else 'not installed'}")
+    elif cmd == "doctor":
+        sys.exit(0 if doctor() else 1)
+    else:
+        print(__doc__)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

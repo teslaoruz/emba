@@ -590,7 +590,7 @@ Item {
 
                         Text {
                             width: parent.width
-                            text: srow.modelData.name
+                            text: `${srow.modelData.name} · ${srow.modelData.agent ?? "claude"}`
                             color: Theme.text
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
@@ -620,7 +620,7 @@ Item {
             }
 
             Pill {
-                text: "Ask Claude"
+                text: `Ask ${App.askLabel}`
                 onClicked: root.expand("ask")
             }
         }
@@ -633,7 +633,7 @@ Item {
             id: empty
 
             // first run: offer to connect before anything else
-            readonly property bool connected: App.status.hooks !== false
+            readonly property bool connected: App.connected !== false
 
             spacing: 10
 
@@ -646,7 +646,7 @@ Item {
             Dim {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: empty.connected ? "Start claude in a terminal, or ask here." : "Connect me to Claude Code and I'll watch your sessions and ask before anything runs."
+                text: empty.connected ? "Start an agent in a terminal, or ask here." : "Connect me to your coding agents (Claude Code, Codex, opencode, Gemini) and I'll watch your sessions and ask before anything runs."
             }
             Row {
                 spacing: 6
@@ -658,7 +658,7 @@ Item {
                     onClicked: App.run(["connect"])
                 }
                 Pill {
-                    text: "Ask Claude"
+                    text: `Ask ${App.askLabel}`
                     primary: empty.connected
                     onClicked: root.expand("ask")
                 }
@@ -679,7 +679,7 @@ Item {
 
                 Header {
                     Layout.fillWidth: true
-                    title: root.pending[0]?.name ?? ""
+                    title: root.pending[0] ? `${root.pending[0].name} · ${root.pending[0].agent}` : ""
                     sub: root.pending.length > 1 ? `wants to use ${root.pending[0]?.tool} · 1 of ${root.pending.length}` : `wants to use ${root.pending[0]?.tool}`
                     dot: Theme.warn
                 }
@@ -757,7 +757,7 @@ Item {
             Header {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
-                title: parent.sess?.name ?? "Claude"
+                title: parent.sess?.name ?? "Your agent"
                 sub: "is done"
                 dot: Theme.ok
             }
@@ -852,8 +852,8 @@ Item {
             Header {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
-                title: "Ask Claude"
-                sub: "runs claude -p on your plan"
+                title: `Ask ${App.askLabel}`
+                sub: `runs ${App.askTool} on your own account`
                 dot: Theme.thinking
             }
 
@@ -938,7 +938,7 @@ Item {
             Header {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
-                title: App.asking ? "Claude is thinking…" : App.askError ? "Something went wrong" : "Claude says"
+                title: App.asking ? `${App.askLabel} is thinking…` : App.askError ? "Something went wrong" : `${App.askLabel} says`
                 dot: App.askError ? Theme.error : Theme.thinking
                 opacity: App.asking ? shimmer2.value : 1
 

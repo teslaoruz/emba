@@ -43,7 +43,7 @@ FloatingWindow {
                     Layout.preferredWidth: 76
                     Layout.preferredHeight: 76
                     bodyColor: App.cfg.color
-                    mood: !win.st.hooks ? "idle" : App.pending.length ? "waiting" : "idle"
+                    mood: App.pending.length ? "waiting" : "idle"
                     Component.onCompleted: wave()
                 }
                 ColumnLayout {
@@ -56,61 +56,79 @@ FloatingWindow {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: "A red panda that keeps an eye on Claude Code"
+                        text: "A red panda that keeps an eye on your coding agents"
                         color: Theme.dim
                         font.pixelSize: 12
                     }
                 }
             }
 
-            // ---- Claude Code ----
-            Section { text: "Claude Code" }
+            // ---- agents ----
+            Section { text: "Agents" }
 
             Card {
-                RowLayout {
-                    Layout.fillWidth: true
+                Repeater {
+                    model: [["claude", "Claude Code", "approve from Emba"], ["codex", "Codex", "approve from Emba"], ["opencode", "opencode", "approve from Emba for 30 s, then the terminal"], ["gemini", "Gemini CLI", "watch only; approve in its terminal"]]
 
-                    Rectangle {
-                        width: 8
-                        height: 8
-                        radius: 4
-                        color: win.st.hooks ? Theme.ok : Theme.warn
-                    }
-                    ColumnLayout {
+                    RowLayout {
+                        id: agentRow
+
+                        required property var modelData
+                        readonly property var info: win.st.agents?.[modelData[0]] ?? {}
+
                         Layout.fillWidth: true
-                        spacing: 1
+                        opacity: info.installed || info.connected ? 1 : 0.55
 
-                        Text {
-                            text: win.st.hooks ? "Connected" : "Not connected yet"
-                            color: Theme.text
-                            font.pixelSize: 13
-                            font.weight: Font.Medium
+                        Rectangle {
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: agentRow.info.connected ? Theme.ok : agentRow.info.installed ? Theme.warn : Theme.faint
                         }
-                        Text {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: win.st.hooks ? "Hooks are in ~/.claude/settings.json. Restart open sessions to pick them up." : "Adds Emba's hooks to ~/.claude/settings.json. A backup is kept; nothing else changes."
-                            color: Theme.dim
-                            font.pixelSize: 11
-                            wrapMode: Text.Wrap
+                            spacing: 1
+
+                            Text {
+                                text: agentRow.modelData[1]
+                                color: Theme.text
+                                font.pixelSize: 13
+                                font.weight: Font.Medium
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: agentRow.info.connected ? `Connected · ${agentRow.modelData[2]}` : agentRow.info.installed ? "Installed, not connected" : "Not installed"
+                                color: Theme.dim
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
                         }
-                    }
-                    Button {
-                        text: App.busy ? "…" : win.st.hooks ? "Disconnect" : "Connect"
-                        primary: !win.st.hooks
-                        onClicked: App.run(win.st.hooks ? ["disconnect"] : ["connect"])
+                        Button {
+                            visible: agentRow.info.installed || agentRow.info.connected
+                            text: App.busy ? "…" : agentRow.info.connected ? "Disconnect" : "Connect"
+                            primary: !agentRow.info.connected
+                            onClicked: App.run([agentRow.info.connected ? "disconnect" : "connect", agentRow.modelData[0]])
+                        }
                     }
                 }
 
+                Text {
+                    Layout.fillWidth: true
+                    text: "Connecting adds Emba's hooks to the agent's settings file and keeps a backup. Restart open sessions afterwards."
+                    color: Theme.faint
+                    font.pixelSize: 10
+                    wrapMode: Text.Wrap
+                }
+
                 Toggle {
-                    text: "Show usage limits"
+                    text: "Show Claude Code usage limits"
                     hint: "Reads them from your statusline; its output stays the same"
-                    checked: !!win.st.statusline
-                    enabled: !!win.st.hooks && !App.busy
-                    onToggled: on => App.run(on ? ["connect", "--statusline"] : ["connect"])
+                    checked: !!win.st.agents?.claude?.statusline
+                    enabled: !!win.st.agents?.claude?.connected && !App.busy
+                    onToggled: on => App.run(on ? ["connect", "claude", "--statusline"] : ["connect", "claude"])
                 }
                 Toggle {
-                    text: "Start with my session"
-                    hint: "systemd user service"
+                    text: "Start when I log in"
                     checked: !!win.st.autostart
                     enabled: !App.busy
                     onToggled: on => App.run(["autostart", on ? "on" : "off"])
