@@ -16,6 +16,8 @@ Item {
     property bool running: visible
     // gaze target in pixels relative to Emba's centre; null = wander
     property var gaze: null
+    // 0..1 loudness while Emba speaks; opens the mouth in time with the voice
+    property real talk: 0
 
     signal clicked
 
@@ -90,6 +92,7 @@ Item {
             idle: "#00000000",
             working: Theme.working,
             thinking: Theme.thinking,
+            listening: Theme.working,
             waiting: Theme.warn,
             question: "#22d3ee",
             done: Theme.ok,
@@ -133,6 +136,13 @@ Item {
             ly = -0.55;
             lx = Math.sin(t * 1.3) * 0.35;
             mouth = Math.max(0, Math.sin(t * 14)) * 0.35;
+        } else if (m === "listening") {
+            // ears up, leaning in
+            eyeScale = 1.15;
+            lx = 0;
+            ly = 0.25;
+            arm = 0.3 + Math.sin(t * 3) * 0.08;
+            bob = -1.5;
         } else if (m === "thinking") {
             lx = 0.6; ly = 0.7;
             roll = 0.08 + Math.sin(t * 1.5) * 0.03;
@@ -211,7 +221,7 @@ Item {
         p.squash += p.squashVel * dt;
         p.roll = approach(p.roll, roll, 8, dt);
         p.arm = approach(p.arm, arm, 14, dt);
-        p.mouth = approach(p.mouth, mouth, 18, dt);
+        p.mouth = Math.max(approach(p.mouth, mouth, 18, dt), Math.min(1, root.talk * 1.4));
         p.eyeScale = approach(p.eyeScale, eyeScale, 12, dt);
         p.eyeOpen = approach(p.eyeOpen, open, open < p.eyeOpen ? 40 : 18, dt);
         p.lookX = approach(p.lookX, lx, 7, dt);

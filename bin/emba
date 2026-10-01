@@ -16,11 +16,17 @@ usage: emba [command]
   disconnect [AGENT ...]
   autostart on|off      start Emba when you log in
 
+  look                  drag a rectangle on screen and ask about it
+  listen                talk to Emba (voice must be on in settings)
+  capture               just take the screenshot and print its path
+  voice-install         download the local speech models (free, ~250 MB)
+
   status [--json]       what is running and connected
   doctor                check everything Emba needs
   run                   run in the foreground (what autostart uses)
 """
 
+import getpass
 import importlib.util
 import json
 import os
@@ -28,6 +34,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -204,6 +211,49 @@ def autostart(on):
 
 # ---------------------------------------------------------------- status
 
+def venv_python():
+    """The app's own venv (PySide6, voice) if the installer made one."""
+    p = APP / ".venv" / ("Scripts/python.exe" if SYSTEM == "Windows" else "bin/python")
+    return str(p) if p.exists() else sys.executable
+
+
+def voice_ready(py):
+    r = subprocess.run([py, "-c", "import faster_whisper, sounddevice, piper"], capture_output=True)
+    return r.returncode == 0
+
+
+def capture():
+    """Let the user drag a rectangle; print the PNG's path (nothing if cancelled)."""
+    d = Path(tempfile.gettempdir()) / f"emba-{getpass.getuser()}"
+    d.mkdir(exist_ok=True)
+    out = d / f"capture-{time.strftime('%Y%m%d-%H%M%S')}.png"
+    if SYSTEM == "Linux" and os.environ.get("WAYLAND_DISPLAY") and shutil.which("slurp") and shutil.which("grim"):
+        geo = subprocess.run(["slurp"], capture_output=True, text=True)
+        if geo.returncode != 0 or not geo.stdout.strip():
+            return
+        subprocess.run(["grim", "-g", geo.stdout.strip(), str(out)])
+    elif SYSTEM == "Darwin":
+        subprocess.run(["screencapture", "-i", "-x", str(out)])
+    else:
+        subprocess.run([venv_python(), str(APP / "desktop" / "capture.py"), str(out)])
+    if out.exists():
+        print(out)
+
+
+VOICE_PACKAGES = ["faster-whisper", "sounddevice", "piper-tts"]
+
+
+def voice_install():
+    """Put the voice packages in the app's own venv and fetch the models."""
+    venv = APP / ".venv"
+    if not venv.exists():
+        subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    py = venv_python()
+    subprocess.run([py, "-m", "pip", "install", "--upgrade", "--quiet"] + VOICE_PACKAGES, check=True)
+    subprocess.run([py, str(APP / "voice" / "voice.py"), "setup"], check=True)
+    print("voice is ready: turn it on in emba settings")
+
+
 def status():
     return {
         "running": running(),
@@ -211,6 +261,8 @@ def status():
         "host": "quickshell" if use_quickshell() else "qt",
         "agents": hooks.status(),
         "ask": [t for t in ASK_TOOLS if shutil.which(t)],
+        "python": venv_python(),
+        "voice": voice_ready(venv_python()),
     }
 
 
@@ -264,7 +316,7 @@ def main():
     elif cmd == "run":
         c = host_command()
         sys.exit(subprocess.call(c))
-    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state"):
+    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say"):
         if not running():
             start()
         reply = ipc(cmd, *rest)
@@ -284,6 +336,14 @@ def main():
             print(f"running: {st['running']}\nautostart: {st['autostart']}\nhost: {st['host']}")
             for a, v in st["agents"].items():
                 print(f"{a}: {'connected' if v['connected'] else 'installed' if v['installed'] else 'not installed'}")
+    elif cmd == "voice-install":
+        voice_install()
+    elif cmd == "capture":
+        capture()
+    elif cmd in ("look", "listen"):
+        if not running():
+            start()
+        ipc(cmd)
     elif cmd == "doctor":
         sys.exit(0 if doctor() else 1)
     else:

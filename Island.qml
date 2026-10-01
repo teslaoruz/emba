@@ -37,7 +37,7 @@ Item {
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
 
-    readonly property string mode: open ? "expanded" : peeking ? "peek" : (sessions.length || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
+    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (sessions.length || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -48,7 +48,7 @@ Item {
         return sessions.length ? "overview" : "empty";
     }
     // views that stay open after the cursor leaves
-    readonly property bool sticky: ["approval", "ask", "result", "file", "drop"].includes(view) || App.asking
+    readonly property bool sticky: ["approval", "ask", "result", "file", "drop", "listen"].includes(view) || App.asking || App.voiceState !== ""
 
     function expand(v) {
         forcedView = v ?? "";
@@ -91,6 +91,19 @@ Item {
         function onAskRequested() {
             root.expand("ask");
         }
+        function onCaptured(path) {
+            root.files = [path];
+            panda.surprise();
+            root.expand("ask");
+        }
+        function onListenRequested() {
+            if (!root.pending.length)
+                root.expand("listen");
+        }
+        function onHeardChanged() {
+            if (App.heard && root.forcedView === "listen" && !root.pending.length)
+                root.forcedView = "result";
+        }
     }
 
     Timer {
@@ -125,6 +138,10 @@ Item {
             return "idle";
         if (pending.length)
             return "waiting";
+        if (App.voiceState === "listening")
+            return "listening";
+        if (App.voiceState === "speaking")
+            return "idle";
         if (App.asking)
             return "thinking";
         if (open && view === "finished")
@@ -272,6 +289,7 @@ Item {
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
                 mood: root.mood
+                talk: App.voiceState === "speaking" ? App.voiceLevel : 0
                 bodyColor: App.cfg.color
 
                 Behavior on px { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
@@ -343,7 +361,8 @@ Item {
                         ask: askView,
                         result: resultView,
                         file: fileView,
-                        drop: dropView
+                        drop: dropView,
+                        listen: listenView
                     })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
 
                 Behavior on opacity {
@@ -404,6 +423,7 @@ Item {
         if (!req)
             return;
         App.decide(req.id, behavior, always);
+        App.voiceHint = "";
         if (behavior === "allow")
             panda.emote("happy", 1);
         else
@@ -420,12 +440,44 @@ Item {
 
         property var gaze: null
         readonly property bool hostCursor: typeof Quickshell.cursorPos === "function"
-        readonly property bool wanted: (App.cfg.trackCursor ?? true) && root.mode !== "hidden"
+        // shaking to talk needs the cursor even while the island is hidden
+        readonly property bool wanted: ((App.cfg.trackCursor ?? true) && root.mode !== "hidden") || (!!App.cfg.voice && !!App.cfg.voiceShake)
+        property var trail: []
 
         function aim(x, y) {
             // mapToItem(null) is already in window pixels, scale included
             const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
             gaze = Qt.point(x - root.origin.x - c.x, y - root.origin.y - c.y);
+            if (App.cfg.voice && App.cfg.voiceShake)
+                shake(x);
+        }
+
+        // A shake is the cursor swinging left-right at least 4 times, each
+        // swing over 60 px, within 0.9 s. Ordinary pointing never does that.
+        function shake(x) {
+            const now = Date.now();
+            trail = trail.filter(p => now - p.t < 900).concat([{
+                        x: x,
+                        t: now
+                    }]);
+            let turns = 0, dir = 0, from = trail[0].x;
+            for (let i = 1; i < trail.length; i++) {
+                const d = trail[i].x - trail[i - 1].x;
+                if (Math.abs(d) < 4)
+                    continue;
+                const s = Math.sign(d);
+                if (dir && s !== dir) {
+                    if (Math.abs(trail[i - 1].x - from) > 60)
+                        turns++;
+                    from = trail[i - 1].x;
+                }
+                dir = s;
+            }
+            if (turns >= 4 && App.voiceState === "") {
+                trail = [];
+                panda.surprise();
+                App.listen();
+            }
         }
     }
 
@@ -487,13 +539,30 @@ Item {
         property string text
         property string key
         property bool primary
+        // voice pointed at this button: it pulses, but still needs a click
+        property bool hinted
         signal clicked
 
         implicitWidth: row.implicitWidth + 24
         implicitHeight: 30
         radius: 15
         color: primary ? (ph.hovered ? Qt.lighter(Theme.primary, 1.08) : Theme.primary) : Qt.alpha(Theme.text, ph.hovered ? 0.15 : 0.09)
-        scale: tap.pressed ? 0.94 : 1
+        scale: tap.pressed ? 0.94 : hinted ? hintPulse.value : 1
+        border.width: hinted ? 2 : 0
+        border.color: Theme.warn
+
+        QtObject {
+            id: hintPulse
+
+            property real value: 1
+
+            SequentialAnimation on value {
+                running: pill.hinted
+                loops: Animation.Infinite
+                NumberAnimation { to: 1.08; duration: 380; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1; duration: 380; easing.type: Easing.InOutSine }
+            }
+        }
 
         Behavior on scale { NumberAnimation { duration: 90 } }
         Behavior on color { ColorAnimation { duration: 120 } }
@@ -755,6 +824,7 @@ Item {
                 Pill {
                     text: "Deny"
                     key: "N"
+                    hinted: App.voiceHint === "deny"
                     onClicked: root.decide("deny")
                 }
                 Pill {
@@ -765,6 +835,7 @@ Item {
                 Pill {
                     text: "Allow"
                     key: "Y"
+                    hinted: App.voiceHint === "allow"
                     primary: true
                     onClicked: root.decide("allow")
                 }
@@ -885,8 +956,43 @@ Item {
                 Layout.fillWidth: true
                 Layout.rightMargin: 18
                 title: `Ask ${App.askLabel}`
-                sub: `runs ${App.askTool} on your own account`
+                sub: "on your own account"
                 dot: Theme.thinking
+            }
+
+            // switch who answers; only tools that are installed show up
+            Flow {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: (App.status.ask ?? []).length > 1
+
+                Repeater {
+                    model: App.status.ask ?? []
+
+                    Rectangle {
+                        required property string modelData
+                        readonly property bool on: App.askTool === modelData
+
+                        width: chip.implicitWidth + 16
+                        height: 22
+                        radius: 11
+                        color: on ? Theme.thinking : Qt.alpha(Theme.text, chipHover.hovered ? 0.12 : 0.06)
+
+                        Behavior on color { ColorAnimation { duration: 140 } }
+
+                        Text {
+                            id: chip
+
+                            anchors.centerIn: parent
+                            text: parent.modelData
+                            color: parent.on ? Theme.onPrimary : Theme.dim
+                            font.pixelSize: 11
+                            font.weight: parent.on ? Font.DemiBold : Font.Normal
+                        }
+                        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: App.setCfg({ askWith: parent.modelData }) }
+                    }
+                }
             }
 
             Flow {
@@ -940,6 +1046,7 @@ Item {
                     focus: true
                     Component.onCompleted: forceActiveFocus()
                     onAccepted: {
+                        App.heard = "";
                         App.ask(text, root.files);
                         root.forcedView = "result";
                     }
@@ -954,9 +1061,86 @@ Item {
                     }
                 }
             }
-            Dim {
-                text: "Click the box first if typing does nothing · Esc closes"
-                font.pixelSize: 11
+            RowLayout {
+                spacing: 6
+
+                Pill {
+                    visible: !!App.cfg.voice
+                    text: "🎤 Talk"
+                    onClicked: App.listen()
+                }
+                Pill {
+                    text: "⛶ Look at screen"
+                    onClicked: App.look()
+                }
+                Dim {
+                    Layout.fillWidth: true
+                    text: "Esc closes"
+                    font.pixelSize: 11
+                }
+            }
+        }
+    }
+
+    Component {
+        id: listenView
+
+        ColumnLayout {
+            spacing: 10
+
+            Header {
+                Layout.fillWidth: true
+                Layout.rightMargin: 18
+                title: App.voiceState === "thinking" ? "Got it…" : App.voiceError ? "Didn't catch that" : "Listening"
+                sub: App.voiceError || (App.voiceState === "listening" ? "talk, then pause" : "")
+                dot: App.voiceError ? Theme.error : Theme.working
+            }
+
+            // a little equaliser that follows the microphone
+            Row {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 4
+                visible: App.voiceState === "listening"
+
+                Repeater {
+                    model: 9
+
+                    Rectangle {
+                        required property int index
+                        readonly property real k: 1 - Math.abs(index - 4) / 5
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 5
+                        height: 6 + 34 * App.voiceLevel * k * (0.6 + 0.4 * Math.abs(Math.sin(index * 1.7 + App.voiceLevel * 9)))
+                        radius: 3
+                        color: Theme.working
+
+                        Behavior on height { NumberAnimation { duration: 90 } }
+                    }
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: App.heard !== ""
+                text: `“${App.heard}”`
+                color: Theme.dim
+                font.italic: true
+            }
+
+            RowLayout {
+                spacing: 6
+
+                Pill {
+                    visible: App.voiceState === ""
+                    text: "Try again"
+                    primary: true
+                    onClicked: App.listen()
+                }
+                Pill {
+                    text: "Type instead"
+                    onClicked: root.expand("ask")
+                }
             }
         }
     }
@@ -986,6 +1170,15 @@ Item {
                         NumberAnimation { to: 1; duration: 800 }
                     }
                 }
+            }
+
+            Dim {
+                Layout.fillWidth: true
+                visible: App.heard !== ""
+                text: `you said: “${App.heard}”`
+                font.italic: true
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
             }
 
             Flickable {

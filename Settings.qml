@@ -124,6 +124,14 @@ Rectangle {
                     enabled: !!win.st.agents?.claude?.connected && !App.busy
                     onToggled: on => App.run(on ? ["connect", "claude", "--statusline"] : ["connect", "claude"])
                 }
+                Labelled {
+                    text: "Ask with"
+                    Segmented {
+                        options: [["Auto", "auto"]].concat((win.st.ask ?? []).map(t => [t, t]))
+                        value: App.cfg.askWith
+                        onPicked: v => App.setCfg({ askWith: v })
+                    }
+                }
                 Toggle {
                     text: "Start when I log in"
                     checked: !!win.st.autostart
@@ -254,6 +262,83 @@ Rectangle {
                             }
                         }
                     }
+                }
+            }
+
+            // ---- voice ----
+            Section { text: "Voice" }
+
+            Card {
+                Toggle {
+                    text: "Talk to Emba"
+                    hint: win.st.voice ? "Speech stays on this computer (Whisper + Piper)" : "Needs a one-time download (~250 MB), then works offline"
+                    checked: !!App.cfg.voice
+                    enabled: !!win.st.voice
+                    onToggled: on => App.setCfg({ voice: on })
+                }
+                RowLayout {
+                    visible: !win.st.voice
+
+                    Button {
+                        text: App.busy ? "Installing…" : "Install voice"
+                        primary: true
+                        onClicked: App.run(["voice-install"])
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "free and local; nothing is sent anywhere"
+                        color: Theme.faint
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                    }
+                }
+                Toggle {
+                    visible: !!App.cfg.voice
+                    text: "Shake the cursor to talk"
+                    checked: !!App.cfg.voiceShake
+                    onToggled: on => App.setCfg({ voiceShake: on })
+                }
+                Toggle {
+                    visible: !!App.cfg.voice
+                    text: "Wake on “Hey Emba”"
+                    hint: "Keeps the microphone open while Emba runs"
+                    checked: !!App.cfg.voiceWake
+                    onToggled: on => App.setCfg({ voiceWake: on })
+                }
+                Toggle {
+                    visible: !!App.cfg.voice
+                    text: "Read answers aloud"
+                    checked: !!App.cfg.voiceReply
+                    onToggled: on => App.setCfg({ voiceReply: on })
+                }
+                Labelled {
+                    visible: !!App.cfg.voice
+                    text: "Hearing"
+                    Segmented {
+                        options: [["Fast", "tiny"], ["Balanced", "base"], ["Accurate", "small"]]
+                        value: App.cfg.voiceModel
+                        onPicked: v => App.setCfg({ voiceModel: v })
+                    }
+                }
+                Labelled {
+                    visible: !!App.cfg.voice
+                    text: "Voice"
+                    Segmented {
+                        options: [["Amy", "en_US-amy-medium"], ["Ryan", "en_US-ryan-medium"], ["Lessac", "en_US-lessac-medium"], ["Alba", "en_GB-alba-medium"]]
+                        value: App.cfg.voiceName
+                        onPicked: v => {
+                            App.setCfg({ voiceName: v });
+                            Qt.callLater(() => App.say("Hi! This is how I sound."));
+                        }
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    visible: !!App.cfg.voice
+                    text: "Voice never answers a permission by itself: saying “allow” only highlights the button."
+                    color: Theme.faint
+                    font.pixelSize: 10
+                    wrapMode: Text.Wrap
                 }
             }
 

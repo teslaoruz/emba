@@ -28,7 +28,15 @@ Singleton {
             askWith: "auto",         // claude gemini opencode codex ollama; auto = first installed
             askModel: "",            // model for the ask box, "" = the tool's default
             focusCommand: [],        // argv; {window} {pid} {cwd} are filled in
-            theme: "auto"            // auto caelestia pywal custom default
+            theme: "auto",           // auto caelestia pywal custom default
+            voice: false,            // talk to Emba (needs: pip install faster-whisper sounddevice piper-tts)
+            voiceShake: true,        // shake the cursor to start listening
+            voiceWake: false,        // "Hey Emba": keeps the microphone open
+            voiceReply: true,        // read answers aloud
+            voiceModel: "base",      // whisper size: tiny base small medium
+            voiceName: "en_US-amy-medium", // any Piper voice
+            wakeWords: "emba,ember,amba",
+            plugins: []              // names of enabled plugins
         })
     property var cfg: defaults
     // what the user actually wrote, so saving keeps keys we do not know
@@ -458,6 +466,138 @@ Singleton {
         }
     }
 
+    // ---------------------------------------------------------------- look
+    // Drag a rectangle on screen; the picture goes to the ask box.
+    signal captured(string path)
+
+    function look() {
+        if (!captureProc.running)
+            captureProc.running = true;
+    }
+
+    Process {
+        id: captureProc
+
+        command: [root.status.python || root.python, root.emba, "capture"]
+        stdout: StdioCollector {
+            onStreamFinished: if (text.trim())
+                root.captured(text.trim())
+        }
+    }
+
+    // ---------------------------------------------------------------- voice
+    // All local (voice/voice.py): Whisper hears, Piper speaks. Voice can
+    // point at Allow or Deny, but only a click ever answers a permission.
+    readonly property string voiceScript: `${Quickshell.shellDir}/voice/voice.py`
+    property string voiceState: ""    // listening thinking speaking ""
+    property real voiceLevel: 0       // mic level while listening, loudness while speaking
+    property string heard: ""
+    property string voiceHint: ""     // allow | deny, for the approval view to highlight
+    property string voiceError: ""
+    property bool speakAnswer: false
+
+    signal listenRequested
+
+    function listen() {
+        if (!cfg.voice || listenProc.running)
+            return;
+        sayProc.running = false;
+        heard = "";
+        voiceError = "";
+        voiceHint = "";
+        listenProc.command = [status.python || python, voiceScript, "listen", "--model", cfg.voiceModel];
+        listenProc.running = true;
+        root.listenRequested();
+    }
+
+    function say(text) {
+        if (!cfg.voice || !cfg.voiceReply || !text.trim())
+            return;
+        sayProc.running = false;
+        sayProc.command = [status.python || python, voiceScript, "say", text.slice(0, 1200), "--voice", cfg.voiceName];
+        sayProc.running = true;
+    }
+
+    function onVoiceLine(line) {
+        let m;
+        try {
+            m = JSON.parse(line);
+        } catch (e) {
+            return;
+        }
+        if (m.state)
+            voiceState = m.state === "done" || m.state === "ready" ? "" : m.state;
+        if (m.level !== undefined)
+            voiceLevel = m.level;
+        if (m.error) {
+            voiceError = m.error;
+            voiceState = "";
+        }
+        if (m.wake)
+            listen();
+        if (m.text !== undefined)
+            gotSpeech(m.text);
+    }
+
+    function gotSpeech(text) {
+        heard = text;
+        voiceState = "";
+        if (!text)
+            return;
+        // with a permission open, "allow"/"deny" only points at the button
+        if (pending.length) {
+            if (/^\s*(allow|yes|approve|okay|ok|go ahead|do it)\b/i.test(text))
+                voiceHint = "allow";
+            else if (/^\s*(deny|no|don't|stop|cancel|reject)\b/i.test(text))
+                voiceHint = "deny";
+            return;
+        }
+        speakAnswer = true;
+        ask(text, []);
+    }
+
+    onAnswerChanged: if (speakAnswer && answer) {
+        speakAnswer = false;
+        say(answer);
+    }
+    onAskErrorChanged: if (askError)
+        speakAnswer = false
+
+    Process {
+        id: listenProc
+
+        stdout: SplitParser {
+            onRead: line => root.onVoiceLine(line)
+        }
+        onExited: if (root.voiceState === "listening" || root.voiceState === "thinking")
+            root.voiceState = ""
+    }
+
+    Process {
+        id: sayProc
+
+        stdout: SplitParser {
+            onRead: line => root.onVoiceLine(line)
+        }
+        onExited: {
+            if (root.voiceState === "speaking")
+                root.voiceState = "";
+            root.voiceLevel = 0;
+        }
+    }
+
+    // "Hey Emba": opt-in, the microphone stays open while this runs
+    Process {
+        running: !!root.cfg.voice && !!root.cfg.voiceWake && !!root.status.voice
+        command: [root.status.python || root.python, root.voiceScript, "wake", "--words", root.cfg.wakeWords]
+        stdout: SplitParser {
+            onRead: line => {
+                if (line.includes('"wake"'))
+                    root.listen();
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ ipc
     signal toggleRequested
     signal askRequested
@@ -505,6 +645,17 @@ Singleton {
                             name: p.name
                         }))
             });
+        case "look":
+            root.look();
+            return "ok";
+        case "listen":
+            if (!root.cfg.voice)
+                return "voice is off: turn it on in emba settings";
+            root.listen();
+            return "ok";
+        case "say":
+            root.say((args ?? []).join(" "));
+            return "ok";
         case "quit":
             Qt.callLater(Qt.quit);
             return "ok";
