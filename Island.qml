@@ -920,6 +920,65 @@ Item {
         TapHandler { onTapped: corner.clicked() }
     }
 
+    // a round, drawn icon: "mic" (talk) or "area" (point at the screen)
+    component ToolIcon: Rectangle {
+        id: ti
+
+        property string kind
+        property string hint
+        readonly property bool hovered: tih.hovered
+        readonly property color ink: tih.hovered ? Theme.primary : Theme.dim
+        signal clicked
+
+        width: 30
+        height: 30
+        radius: 15
+        color: Qt.alpha(Theme.text, tih.hovered ? 0.12 : 0.05)
+        scale: tit.pressed ? 0.9 : 1
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on scale { NumberAnimation { duration: 90 } }
+
+        // microphone: capsule, cradle, stand
+        Item {
+            visible: ti.kind === "mic"
+            anchors.fill: parent
+
+            Rectangle { x: 12; y: 6; width: 6; height: 11; radius: 3; color: ti.ink }
+            Item {
+                x: 9; y: 12; width: 12; height: 7; clip: true
+                Rectangle { y: -5; width: 12; height: 12; radius: 6; color: "transparent"; border.width: 1.6; border.color: ti.ink }
+            }
+            Rectangle { x: 14.2; y: 19; width: 1.6; height: 3; color: ti.ink }
+            Rectangle { x: 11.5; y: 22; width: 7; height: 1.6; radius: 0.8; color: ti.ink }
+        }
+
+        // a selection: four corner brackets around a small dot
+        Item {
+            visible: ti.kind === "area"
+            anchors.fill: parent
+
+            Repeater {
+                model: 4
+
+                Item {
+                    required property int index
+                    x: index % 2 ? 16 : 7
+                    y: index < 2 ? 7 : 16
+                    width: 7
+                    height: 7
+
+                    Rectangle { y: parent.index < 2 ? 0 : 5.4; width: 7; height: 1.6; radius: 0.8; color: ti.ink }
+                    Rectangle { x: parent.index % 2 ? 5.4 : 0; width: 1.6; height: 7; radius: 0.8; color: ti.ink }
+                }
+            }
+            Rectangle { anchors.centerIn: parent; width: 4; height: 4; radius: 2; color: ti.ink }
+        }
+
+        HoverHandler { id: tih; cursorShape: Qt.PointingHandCursor }
+        TapHandler { id: tit; onTapped: ti.clicked() }
+    }
+
     // a word you can click: for everything that is not the main decision
     component Link: Text {
         id: link
@@ -1441,7 +1500,7 @@ Item {
                     Text {
                         visible: !input.text
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.files.length ? "What about it?" : `Ask ${App.askLabel}…`
+                        text: micIcon.hovered ? micIcon.hint : areaIcon.hovered ? areaIcon.hint : root.files.length ? "What about it?" : `Ask ${App.askLabel}…`
                         color: Theme.faint
                         font.pixelSize: 13
                     }
@@ -1452,19 +1511,21 @@ Item {
                     id: tools
 
                     anchors.right: parent.right
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: 5
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 10
+                    spacing: 4
 
-                    Link {
+ToolIcon {
+                        id: micIcon
                         visible: !!App.cfg.voice
-                        text: "🎤"
-                        font.pixelSize: 15
+                        kind: "mic"
+                        hint: "Talk to Emba"
                         onClicked: App.listen()
                     }
-                    Link {
-                        text: "⛶"
-                        font.pixelSize: 16
+                    ToolIcon {
+                        id: areaIcon
+                        kind: "area"
+                        hint: "Show Emba part of your screen"
                         onClicked: App.look()
                     }
                 }
