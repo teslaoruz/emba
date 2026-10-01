@@ -28,6 +28,8 @@ Item {
     readonly property bool edgeBottom: vAlign === 1 && (App.cfg.marginY ?? 0) === 0
     readonly property bool edgeLeft: hAlign === 0 && (App.cfg.marginX ?? 0) === 0
     readonly property bool edgeRight: hAlign === 1 && (App.cfg.marginX ?? 0) === 0
+    // on the left or right edge (not a corner) the small pill stands upright
+    readonly property bool sideways: (edgeLeft || edgeRight) && !(edgeTop || edgeBottom)
 
     readonly property bool wantsKeys: open && ["ask", "approval", "result", "file"].includes(view)
 
@@ -218,7 +220,7 @@ Item {
         if (mode === "peek")
             return Qt.size(76, 70);
         if (mode === "compact")
-            return Qt.size(Math.min(300, 58 + compactLabel.implicitWidth + 14 + Math.min(sessions.length, 6) * 10 + 8), 44);
+            return sideways ? Qt.size(44, 52 + Math.min(sessions.length, 6) * 10 + 4) : Qt.size(Math.min(300, 58 + compactLabel.implicitWidth + 14 + Math.min(sessions.length, 6) * 10 + 8), 44);
         return Qt.size(460, Math.max(132, Math.min(360, (content.item?.implicitHeight ?? 100) + 30)));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
@@ -421,8 +423,8 @@ Item {
 
                 width: px
                 height: px
-                x: root.mode === "expanded" ? 12 : root.mode === "compact" ? 8 : (shape.width - px) / 2
-                y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : (shape.height - px) / 2
+                x: root.mode === "expanded" ? 12 : root.mode === "compact" && !root.sideways ? 8 : (shape.width - px) / 2
+                y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : root.mode === "compact" && root.sideways ? 6 : (shape.height - px) / 2
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
                 mood: root.mood
@@ -552,7 +554,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 x: 50
                 spacing: 8
-                opacity: root.mode === "compact" ? 1 : 0
+                opacity: root.mode === "compact" && !root.sideways ? 1 : 0
                 visible: opacity > 0
 
                 Behavior on opacity { NumberAnimation { duration: root.mode === "compact" ? 260 : 120 } }
@@ -584,6 +586,30 @@ Item {
                             radius: 3
                             color: App.stateColours[modelData.state] ?? Theme.dim
                         }
+                    }
+                }
+            }
+
+            // on a side edge the pill stands upright: Emba on top, a dot per session below
+            Column {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 46
+                spacing: 4
+                opacity: root.mode === "compact" && root.sideways ? 1 : 0
+                visible: opacity > 0
+
+                Behavior on opacity { NumberAnimation { duration: 260 } }
+
+                Repeater {
+                    model: root.sessions.slice(0, 6)
+
+                    Rectangle {
+                        required property var modelData
+
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: App.stateColours[modelData.state] ?? Theme.dim
                     }
                 }
             }
