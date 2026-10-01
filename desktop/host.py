@@ -27,7 +27,7 @@ from PySide6.QtQml import (ListProperty, QQmlApplicationEngine, QQmlComponent, Q
                            qmlRegisterType)
 
 APP = Path(__file__).resolve().parent.parent
-SHARED = ["App.qml", "Theme.qml", "Island.qml", "Panda.qml", "Settings.qml"]
+SHARED = ["App.qml", "Theme.qml", "Pet.qml", "Island.qml", "Panda.qml", "Settings.qml"]
 
 
 def socket_address():
@@ -475,7 +475,7 @@ def stage_shared_qml():
     mod.mkdir(parents=True, exist_ok=True)
     for name in SHARED:
         shutil.copy2(APP / name, mod / name)
-    (mod / "qmldir").write_text("module qs\nsingleton App 1.0 App.qml\nsingleton Theme 1.0 Theme.qml\n"
+    (mod / "qmldir").write_text("module qs\nsingleton App 1.0 App.qml\nsingleton Theme 1.0 Theme.qml\nsingleton Pet 1.0 Pet.qml\n"
                                 "Island 1.0 Island.qml\nPanda 1.0 Panda.qml\nSettings 1.0 Settings.qml\n")
     return root
 

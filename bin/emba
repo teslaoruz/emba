@@ -9,6 +9,8 @@ usage: emba [command]
   toggle | ask          open or close the island / open the ask box
   allow | deny          answer the oldest permission request
   set KEY VALUE         change a setting, e.g. emba set position top-left
+  care, feed, play, nap, pet
+                        look after Emba
 
   connect [AGENT ...] [--statusline]
                         hook Emba into claude, codex, gemini, opencode
@@ -365,7 +367,7 @@ def main():
     elif cmd == "run":
         c = host_command()
         sys.exit(subprocess.call(c))
-    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say"):
+    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet"):
         if not running():
             start()
         reply = ipc(cmd, *rest)

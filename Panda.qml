@@ -20,6 +20,11 @@ Item {
     property real talk: 0
 
     signal clicked
+    // the cursor rubbed back and forth over Emba
+    signal petted
+    signal doubleClicked
+    // pressed and held for a moment
+    signal held
 
     implicitWidth: 96
     implicitHeight: 96
@@ -41,6 +46,9 @@ Item {
     function wave() {
         p.waveLeft = 1.2;
         emote("happy", 1.2);
+    }
+    function shakeHead() {
+        p.shakeLeft = 0.6;
     }
     function dizzy() {
         emote("dizzy", 3.3);
@@ -167,6 +175,26 @@ Item {
             open = 0.55;
             arm = 0.05;
             bob = 1.5;
+        } else if (m === "hungry") {
+            // droopy, with a tummy rumble every few seconds
+            open = 0.8;
+            ly = -0.35;
+            arm = 0.02;
+            const rumble = (t % 4) < 0.5;
+            roll = rumble ? Math.sin(t * 40) * 0.05 : 0;
+            mouth = rumble ? 0.25 : 0;
+        } else if (m === "sleepy") {
+            // heavy eyes and a big yawn now and then
+            const yawn = (t % 7) < 1.2;
+            open = yawn ? 0 : 0.45;
+            mouth = yawn ? Math.sin((t % 7) / 1.2 * Math.PI) : 0;
+            arm = yawn ? 0.6 : 0.02;
+            breathe = 0.045 * Math.sin(t * 1.6);
+        } else if (m === "lonely") {
+            // looks right at you, big hopeful eyes
+            eyeScale = 1.12;
+            arm = 0.15 + Math.max(0, Math.sin(t * 1.3)) * 0.25;
+            bob = 1;
         }
 
         // emotes win over the mood
@@ -264,6 +292,10 @@ Item {
             glyph = "z"; colour = "#94a3b8"; every = 1.3;
         } else if (m === "limit") {
             glyph = "●"; colour = "#7cc7ff"; every = 1.1;
+        } else if (m === "hungry") {
+            glyph = "…"; colour = "#c9a27e"; every = 3;
+        } else if (m === "lonely") {
+            glyph = "♡"; colour = "#ff9db5"; every = 3.5;
         }
         p.particleLeft = every || 0.2;
         if (!glyph)
@@ -365,12 +397,33 @@ Item {
     HoverHandler {
         id: hover
 
+        // petting: the cursor swinging across Emba a few times in a row
+        property var strokes: []
+        property real lastX: 0
+        property int dir: 0
+
         onHoveredChanged: {
             if (hovered) {
                 p.blinkLeft = 0.14;
                 dwell.restart();
             } else
                 dwell.stop();
+        }
+        onPointChanged: {
+            const x = point.position.x;
+            const d = Math.sign(x - lastX);
+            if (Math.abs(x - lastX) > 2 && d && d !== dir) {
+                const now = Date.now();
+                strokes = strokes.filter(s => now - s < 1500).concat([now]);
+                dir = d;
+                if (strokes.length >= 4) {
+                    strokes = [];
+                    root.love();
+                    p.squashVel += 4;
+                    root.petted();
+                }
+            }
+            lastX = x;
         }
     }
 
@@ -385,6 +438,9 @@ Item {
     TapHandler {
         property var taps: []
 
+        longPressThreshold: 0.7
+        onDoubleTapped: root.doubleClicked()
+        onLongPressed: root.held()
         onTapped: {
             const now = Date.now();
             taps = taps.filter(x => now - x < 1700).concat([now]);
@@ -600,7 +656,7 @@ Item {
             c.fill();
         }
         // tired: a flat lid across the top
-        if (m === "limit" && !e) {
+        if ((m === "limit" || m === "sleepy") && !e) {
             c.fillStyle = root.bodyColor;
             c.fillRect(x - rx - 1, y - ry - 1, rx * 2 + 2, ry * 0.9);
         }

@@ -32,6 +32,15 @@ Item {
     property string finishedSid: ""
     property var files: []
     property bool dragging: false
+    property string petNote: ""
+    property real tossX: 400
+
+    Timer {
+        id: noteTimer
+
+        interval: 3000
+        onTriggered: root.petNote = ""
+    }
 
     readonly property var sessions: App.sessions
     readonly property var pending: App.pending
@@ -48,7 +57,7 @@ Item {
         return sessions.length ? "overview" : "empty";
     }
     // views that stay open after the cursor leaves
-    readonly property bool sticky: ["approval", "ask", "result", "file", "drop", "listen"].includes(view) || App.asking || App.voiceState !== ""
+    readonly property bool sticky: ["approval", "ask", "result", "file", "drop", "listen", "care"].includes(view) || App.asking || App.voiceState !== ""
 
     function expand(v) {
         forcedView = v ?? "";
@@ -88,6 +97,9 @@ Item {
         function onToggleRequested() {
             root.open ? root.collapse() : root.expand();
         }
+        function onCareRequested() {
+            root.expand("care");
+        }
         function onAskRequested() {
             root.expand("ask");
         }
@@ -101,8 +113,13 @@ Item {
                 root.expand("listen");
         }
         function onHeardChanged() {
-            if (App.heard && root.forcedView === "listen" && !root.pending.length)
-                root.forcedView = "result";
+            // a question goes on to the answer; a command (feed, play...) already moved on
+            Qt.callLater(() => {
+                if (App.heard && App.asking && root.forcedView === "listen" && !root.pending.length)
+                    root.forcedView = "result";
+                else if (root.forcedView === "listen" && !App.voiceError)
+                    root.collapse();
+            });
         }
     }
 
@@ -149,8 +166,15 @@ Item {
         if (open && view === "limit")
             return "limit";
         const s = focusSession;
+        // nothing to work on: Emba is just a pet
+        if (!s || s.state === "idle") {
+            if (Pet.napping)
+                return "sleeping";
+            if (Pet.need && !(s && Math.max(App.limits.five_hour?.used ?? 0, App.limits.seven_day?.used ?? 0) >= App.cfg.limitWarn))
+                return Pet.need;
+        }
         if (!s)
-            return Date.now() - App.lastActivity > 600000 && mode !== "hidden" ? "sleeping" : "idle";
+            return "idle";
         if (s.state === "idle" && Math.max(App.limits.five_hour?.used ?? 0, App.limits.seven_day?.used ?? 0) >= App.cfg.limitWarn)
             return "limit";
         return {
@@ -250,8 +274,17 @@ Item {
             }
 
             TapHandler {
-                onTapped: if (!root.open)
-                    root.expand()
+                // closed: open up. On the care view: toss a ball from where you clicked
+                onTapped: eventPoint => {
+                    if (!root.open)
+                        return root.expand();
+                    const q = eventPoint.position;
+                    const onEmba = q.x >= panda.x && q.x <= panda.x + panda.width && q.y >= panda.y && q.y <= panda.y + panda.height;
+                    if (root.view === "care" && !Pet.napping && !onEmba) {
+                        root.tossX = eventPoint.position.x;
+                        Pet.play();
+                    }
+                }
             }
 
             // files dragged in from a file manager
@@ -297,9 +330,119 @@ Item {
                 Behavior on y { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                gaze: hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
+                gaze: toy.visible ? Qt.point(toy.x + toy.width / 2 - x - width / 2, toy.y + toy.height / 2 - y - height / 2) : hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
 
-                onClicked: root.open ? boop() : root.expand()
+                onClicked: Pet.napping ? Pet.nap() : !root.open ? root.expand() : root.view === "care" ? boop() : root.expand("care")
+                onDoubleClicked: {
+                    root.expand("care");
+                    Pet.feed();
+                }
+                onHeld: {
+                    root.expand("care");
+                    if (!Pet.napping)
+                        Pet.nap();
+                }
+                onPetted: Pet.pet()
+            }
+
+            // ---- pet things: a ball to chase, a bamboo snack ----
+            Rectangle {
+                id: toy
+
+                width: 12
+                height: 12
+                radius: 6
+                visible: false
+                color: "#ffd166"
+                border.width: 2
+                border.color: "#f4a259"
+
+                SequentialAnimation {
+                    id: playAnim
+
+                    onStarted: toy.visible = true
+                    onFinished: {
+                        toy.visible = false;
+                        panda.emote("happy", 1.2);
+                    }
+
+                    // bounces across the island and back; Emba's eyes follow it
+                    ParallelAnimation {
+                        NumberAnimation { target: toy; property: "x"; from: root.tossX - 6; to: 8; duration: 1300; easing.type: Easing.InOutQuad }
+                        SequentialAnimation {
+                            loops: 3
+                            NumberAnimation { target: toy; property: "y"; from: shape.height - 22; to: 10; duration: 210; easing.type: Easing.OutQuad }
+                            NumberAnimation { target: toy; property: "y"; to: shape.height - 22; duration: 220; easing.type: Easing.InQuad }
+                        }
+                    }
+                    ParallelAnimation {
+                        NumberAnimation { target: toy; property: "x"; to: shape.width - 24; duration: 1300; easing.type: Easing.InOutQuad }
+                        SequentialAnimation {
+                            loops: 3
+                            NumberAnimation { target: toy; property: "y"; to: 10; duration: 210; easing.type: Easing.OutQuad }
+                            NumberAnimation { target: toy; property: "y"; to: shape.height - 22; duration: 220; easing.type: Easing.InQuad }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                id: snack
+
+                width: 6
+                height: 22
+                radius: 3
+                visible: false
+                color: "#7cc46a"
+                rotation: 20
+
+                Rectangle {
+                    y: 7
+                    width: parent.width
+                    height: 2
+                    color: "#4f9b45"
+                }
+                Rectangle {
+                    x: 3
+                    y: -6
+                    width: 8
+                    height: 5
+                    radius: 3
+                    rotation: -30
+                    color: "#9be07f"
+                }
+
+                SequentialAnimation {
+                    id: feedAnim
+
+                    onStarted: snack.visible = true
+                    onFinished: {
+                        snack.visible = false;
+                        panda.gulp();
+                    }
+
+                    // drops from the top straight into Emba's mouth
+                    PropertyAction { target: snack; property: "x"; value: panda.x + panda.width / 2 - 3 }
+                    NumberAnimation { target: snack; property: "y"; from: -24; to: panda.y + panda.height * 0.55; duration: 650; easing.type: Easing.InQuad }
+                }
+            }
+
+            Connections {
+                target: Pet
+
+                function onFed() {
+                    panda.emote("surprised", 0.6);
+                    feedAnim.restart();
+                }
+                function onPlayed() {
+                    playAnim.restart();
+                }
+                function onRefused(why) {
+                    // a polite no: shake the head, say why
+                    panda.shakeHead();
+                    root.petNote = why === "full" ? "is full, maybe later" : "is too tired to play";
+                    noteTimer.restart();
+                }
             }
 
             // ---- compact: the latest action and a dot per session ----
@@ -362,7 +505,8 @@ Item {
                         result: resultView,
                         file: fileView,
                         drop: dropView,
-                        listen: listenView
+                        listen: listenView,
+                        care: careView
                     })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
 
                 Behavior on opacity {
@@ -1123,6 +1267,34 @@ Item {
                     text: "Esc closes"
                     font.pixelSize: 11
                 }
+            }
+        }
+    }
+
+    Component {
+        id: careView
+
+        ColumnLayout {
+            spacing: 10
+
+            Header {
+                Layout.fillWidth: true
+                Layout.rightMargin: 18
+                title: "Emba"
+                sub: root.petNote || (Pet.napping ? "is napping. Shh…" : {
+                    hungry: "is hungry",
+                    sleepy: "is getting sleepy",
+                    lonely: "missed you"
+                }[Pet.need] ?? "is happy you're here")
+                dot: Pet.need ? Theme.warn : Theme.ok
+            }
+
+            // no buttons: Emba is looked after with the mouse (and voice)
+            Dim {
+                Layout.fillWidth: true
+                text: Pet.napping ? "Click Emba to wake it up." : "Rub to pet · double-click to feed · click here to toss a ball · hold to tuck in"
+                wrapMode: Text.Wrap
+                font.pixelSize: 11
             }
         }
     }

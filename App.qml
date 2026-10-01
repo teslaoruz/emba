@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 
 // Everything emba knows: config, live Claude Code sessions, open permission
 // requests and usage limits. hook/emba-hook feeds it over a Unix socket.
@@ -36,7 +37,8 @@ Singleton {
             voiceModel: "base",      // whisper size: tiny base small medium
             voiceName: "en_US-amy-medium", // any Piper voice
             wakeWords: "emba,ember,amba",
-            plugins: []              // names of enabled plugins
+            plugins: [],             // names of enabled plugins
+            pet: true                // Emba gets hungry, sleepy and lonely, and likes attention
         })
     property var cfg: defaults
     // what the user actually wrote, so saving keeps keys we do not know
@@ -569,6 +571,45 @@ Singleton {
             gotSpeech(m.text);
     }
 
+    // Short spoken commands for Emba itself; anything else goes to the agent.
+    // Only short phrases count, so "how do I fix the play button" is a question.
+    readonly property var voiceCommands: [
+        [/\b(eat|food|feed|snack|bamboo|hungry)\b/, () => {
+                root.careRequested();
+                Pet.feed();
+            }, "Yum!"],
+        [/\b(play|ball|fetch)\b/, () => {
+                root.careRequested();
+                Pet.play();
+            }, "Catch!"],
+        [/\b(wake up|good morning)\b/, () => {
+                if (Pet.napping)
+                    Pet.nap();
+            }, "I'm up!"],
+        [/\b(sleep|nap|bed|rest|good night)\b/, () => {
+                if (!Pet.napping)
+                    Pet.nap();
+            }, "Night night."],
+        [/\b(good (boy|girl|panda)|love you|cute|pet)\b/, () => Pet.pet(), "Hehe."],
+        [/\b(look|screen|screenshot)\b/, () => root.look(), ""],
+        [/\b(settings|preferences)\b/, () => root.command("settings"), ""],
+        [/\b(hide|go away|close)\b/, () => root.toggleRequested(), ""]
+    ]
+
+    function voiceCommand(text) {
+        const t = text.toLowerCase().replace(/^\W*(hey|hi|ok|okay)?\W*(emba|ember|amba)\b\W*/, "");
+        if (t.split(/\s+/).length > 5)
+            return false;
+        for (const [re, act, reply] of voiceCommands)
+            if (re.test(t)) {
+                act();
+                if (reply)
+                    say(reply);
+                return true;
+            }
+        return false;
+    }
+
     function gotSpeech(text) {
         heard = text;
         voiceState = "";
@@ -582,6 +623,8 @@ Singleton {
                 voiceHint = "deny";
             return;
         }
+        if (voiceCommand(text))
+            return;
         speakAnswer = true;
         ask(text, []);
     }
@@ -674,6 +717,7 @@ Singleton {
     // ------------------------------------------------------------------ ipc
     signal toggleRequested
     signal askRequested
+    signal careRequested
 
     // One entry point for every remote command, whether it arrives over the
     // socket (the `emba` CLI, any OS) or Quickshell's IPC (keybinds on Linux).
@@ -728,6 +772,23 @@ Singleton {
             return "ok";
         case "say":
             root.say((args ?? []).join(" "));
+            return "ok";
+        case "care":
+            root.careRequested();
+            return "ok";
+        case "feed":
+            Pet.feed();
+            root.careRequested();
+            return "ok";
+        case "play":
+            Pet.play();
+            root.careRequested();
+            return "ok";
+        case "nap":
+            Pet.nap();
+            return "ok";
+        case "pet":
+            Pet.pet();
             return "ok";
         case "quit":
             Qt.callLater(Qt.quit);
