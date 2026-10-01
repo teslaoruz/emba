@@ -173,6 +173,11 @@ def main():
     if argv[:1] == ["statusline"]:
         return statusline(argv[1:])
     agent = argv[argv.index("--agent") + 1] if "--agent" in argv[:-1] else "claude"
+    if os.environ.get("EMBA_QUIET"):  # an agent Emba itself started (the ask box): not a session
+        sys.stdin.read()
+        if agent == "gemini":
+            print("{}")
+        return
     try:
         p = json.load(sys.stdin)
     except ValueError:

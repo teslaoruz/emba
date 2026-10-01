@@ -66,25 +66,35 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
     import sounddevice as sd
 
     q = queue.Queue()
+    rms = lambda b: float(np.sqrt(np.mean(b ** 2)))  # noqa: E731
     with sd.InputStream(samplerate=RATE, channels=1, dtype="float32", blocksize=BLOCK,
                         callback=lambda d, *_: q.put(d.copy())):
-        # the first half second sets the noise floor, so a noisy room still works
-        floor = [np.sqrt(np.mean(q.get() ** 2)) for _ in range(5)]
-        thr = threshold or max(0.012, float(np.median(floor)) * 3)
-        chunks, started, quiet, t0 = [], False, 0.0, time.time()
+        # Opening a microphone often starts with a click, so skip the first
+        # 0.3 s; the next 0.4 s is the room's own noise. Speech is clearly
+        # above that, and the floor of 0.005 keeps a dead-quiet room from
+        # triggering on breathing. Works with quiet (low-gain) microphones too.
+        for _ in range(3):
+            q.get()
+        floor = sorted(rms(q.get()) for _ in range(4))[1]
+        thr = threshold or max(0.005, floor * 2.5)
+        chunks, preroll, started, quiet, t0 = [], [], False, 0.0, time.time()
         while True:
             block = q.get()
-            level = float(np.sqrt(np.mean(block ** 2)))
+            level = rms(block)
             if report:
                 out(level=round(min(1.0, level / (thr * 4)), 3))
             if level > thr:
+                if not started:
+                    chunks = preroll[-3:]  # keep the start of the first word
                 started, quiet = True, 0.0
             elif started:
                 quiet += BLOCK / RATE
             if started:
                 chunks.append(block)
-            elif time.time() - t0 > max_wait:
-                return None
+            else:
+                preroll.append(block)
+                if time.time() - t0 > max_wait:
+                    return None
             if started and (quiet >= silence or len(chunks) * BLOCK / RATE >= max_len):
                 return np.concatenate(chunks)[:, 0]
 
@@ -104,6 +114,13 @@ def listen():
     model = arg("--model", "base")
     out(state="listening")
     audio = record()
+    if audio is not None and arg("--save", None):  # for debugging: keep what was heard
+        import wave
+        with wave.open(arg("--save", None), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            w.writeframes((audio.clip(-1, 1) * 32767).astype("<i2").tobytes())
     if audio is None:
         out(error="I didn't hear anything")
         return

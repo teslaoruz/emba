@@ -19,7 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import (ClassInfo, Property, QFileSystemWatcher, QObject, QPoint, QProcess, QRect, QTimer, Signal,
+from PySide6.QtCore import (ClassInfo, Property, QFileSystemWatcher, QObject, QPoint, QProcess, QProcessEnvironment, QRect,
+                            QTimer, Signal,
                             Slot)
 from PySide6.QtGui import QCursor, QGuiApplication, QIcon, QRegion
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
@@ -179,6 +180,7 @@ class Process(QObject):
         super().__init__(parent)
         self._command = []
         self._cwd = ""
+        self._env = {}
         self._stdout = None
         self._stderr = None
         self._proc = None
@@ -199,6 +201,9 @@ class Process(QObject):
         self._cwd = d or ""
 
     workingDirectory = Property(str, _get_cwd, _set_cwd)
+
+    # extra variables on top of the normal environment
+    environment = Property("QVariantMap", lambda self: self._env, lambda self, e: setattr(self, "_env", dict(e or {})))
 
     def _get_stdout(self):
         return self._stdout
@@ -230,6 +235,11 @@ class Process(QObject):
     def _start(self):
         program = shutil.which(self._command[0]) or self._command[0]
         p = QProcess(self)
+        if self._env:
+            env = QProcessEnvironment.systemEnvironment()
+            for k, v in self._env.items():
+                env.insert(str(k), str(v))
+            p.setProcessEnvironment(env)
         if self._cwd and Path(self._cwd).is_dir():
             p.setWorkingDirectory(self._cwd)
         for parser in (self._stdout, self._stderr):

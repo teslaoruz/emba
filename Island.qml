@@ -111,6 +111,10 @@ Item {
         function onToggleRequested() {
             root.open ? root.collapse() : root.expand();
         }
+        function onSnapshotRequested(path) {
+            if (path)
+                root.grabToImage(r => r.saveToFile(path));
+        }
         function onAnswerRequested() {
             root.expand("result");
         }

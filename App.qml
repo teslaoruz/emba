@@ -577,6 +577,11 @@ Singleton {
     Process {
         id: askProc
 
+        // runs started by Emba are not sessions to watch
+        environment: ({
+                EMBA_QUIET: "1"
+            })
+
         stdout: StdioCollector {
             onStreamFinished: root.gotAnswer(text)
         }
@@ -819,6 +824,7 @@ Singleton {
     signal askRequested
     signal careRequested
     signal answerRequested
+    signal snapshotRequested(string path)
 
     // One entry point for every remote command, whether it arrives over the
     // socket (the `emba` CLI, any OS) or Quickshell's IPC (keybinds on Linux).
@@ -903,6 +909,10 @@ Singleton {
             return "ok";
         case "pet":
             Pet.pet();
+            return "ok";
+        case "snapshot":
+            // render the island to a PNG (used to check how it looks on other systems)
+            root.snapshotRequested(String((args ?? [])[0] ?? ""));
             return "ok";
         case "quit":
             Qt.callLater(root.leave);

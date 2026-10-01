@@ -433,7 +433,7 @@ def main():
     elif cmd == "run":
         c = host_command()
         sys.exit(subprocess.call(c))
-    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue"):
+    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue", "snapshot"):
         if not running():
             start()
         reply = ipc(cmd, *rest)
