@@ -248,7 +248,8 @@ def capture():
     d.mkdir(exist_ok=True)
     out = d / f"capture-{time.strftime('%Y%m%d-%H%M%S')}.png"
     if SYSTEM == "Linux" and os.environ.get("WAYLAND_DISPLAY") and shutil.which("slurp") and shutil.which("grim"):
-        geo = subprocess.run(["slurp"], capture_output=True, text=True)
+        # slurp reads preset boxes from a non-terminal stdin and would wait on it forever
+        geo = subprocess.run(["slurp"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
         if geo.returncode != 0 or not geo.stdout.strip():
             return
         subprocess.run(["grim", "-g", geo.stdout.strip(), str(out)])

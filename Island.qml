@@ -66,7 +66,9 @@ Item {
         return sessions.length ? "overview" : "empty";
     }
     // views that stay open after the cursor leaves
-    readonly property bool sticky: ["approval", "ask", "result", "file", "drop", "listen", "care"].includes(view) || App.asking || App.voiceState !== ""
+    // what you are typing in the ask box; an empty ask box is not worth holding open
+    property string draft: ""
+    readonly property bool sticky: ["approval", "result", "file", "drop", "listen", "care"].includes(view) || (view === "ask" && draft !== "") || App.asking || App.voiceState !== ""
 
     function expand(v) {
         forcedView = v ?? "";
@@ -75,6 +77,7 @@ Item {
         leaveTimer.stop();
     }
     function collapse() {
+        draft = "";
         playAnim.stop();
         App.followUp = false;
         open = false;
@@ -158,7 +161,8 @@ Item {
     Timer {
         id: leaveTimer
 
-        interval: App.cfg.collapseDelay ?? 1200
+        // an empty ask box gets a little longer: you may be reaching for the keyboard
+        interval: root.view === "ask" ? 5000 : (App.cfg.collapseDelay ?? 1200)
         onTriggered: if (!root.sticky)
             root.collapse()
     }
@@ -1324,6 +1328,7 @@ Item {
                     clip: true
                     focus: true
                     Component.onCompleted: forceActiveFocus()
+                    onTextChanged: root.draft = text
                     onAccepted: {
                         App.heard = "";
                         App.ask(text, root.files);

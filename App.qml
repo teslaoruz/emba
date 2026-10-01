@@ -338,6 +338,15 @@ Singleton {
         limits = next;
     }
 
+    // Quickshell ignores Qt.quit(), so there Emba ends its own process; the Qt
+    // host (no processId) quits normally.
+    function leave() {
+        if (typeof Quickshell.processId === "number" && Qt.platform.os !== "windows")
+            Quickshell.execDetached(["kill", String(Quickshell.processId)]);
+        else
+            Qt.quit();
+    }
+
     // the desktop host passes its own address (named pipe on Windows)
     readonly property string socketPath: Quickshell.env("EMBA_SOCKET") || `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/emba.sock`
     property bool listening: false
@@ -350,7 +359,7 @@ Singleton {
         path: root.socketPath
         onConnectedChanged: if (connected) {
             console.log("emba: already running, leaving");
-            Qt.quit();
+            root.leave();
         }
         onError: root.listening = true  // nobody there: our turn
         Component.onCompleted: connected = true
@@ -896,7 +905,7 @@ Singleton {
             Pet.pet();
             return "ok";
         case "quit":
-            Qt.callLater(Qt.quit);
+            Qt.callLater(root.leave);
             return "ok";
         }
         return `unknown command: ${cmd}`;

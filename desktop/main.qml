@@ -51,6 +51,16 @@ Window {
     }
     Component.onCompleted: updateMask()
 
+    // the ask box should take typing straight away, as on Linux
+    Connections {
+        target: island
+
+        function onViewChanged() {
+            if (island.open && island.view === "ask")
+                win.requestActivate();
+        }
+    }
+
     Window {
         title: "Emba"
         width: 460

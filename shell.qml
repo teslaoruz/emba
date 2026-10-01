@@ -34,7 +34,9 @@ ShellRoot {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "emba"
-        WlrLayershell.keyboardFocus: island.wantsKeys ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        // The ask box takes the keyboard (you asked to type); everything else,
+        // approvals above all, only gets keys after you click it.
+        WlrLayershell.keyboardFocus: island.open && island.view === "ask" ? WlrKeyboardFocus.Exclusive : island.wantsKeys ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         mask: Region {
             item: island.shape
         }
