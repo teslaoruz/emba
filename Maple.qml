@@ -1,6 +1,6 @@
 import QtQuick
 
-// Maple, perch's mascot: a red panda drawn on a Canvas every frame.
+// Maple, perch's mascot: a little red-panda mochi drawn on a Canvas every frame.
 //
 // Set `mood` (what the session is doing) and optionally fire an emote; the
 // frame loop below eases every pose value toward that mood's target, so any
@@ -11,7 +11,7 @@ Item {
     // idle working thinking waiting question done error sleeping limit
     property string mood: "idle"
     // body colour; everything else is fixed so Maple always reads as Maple
-    property color bodyColor: "#d9622b"
+    property color bodyColor: "#e2683c"
     property bool running: visible
     // gaze target in pixels relative to Maple's centre; null = wander
     property var gaze: null
@@ -389,174 +389,132 @@ Item {
         return Qt.rgba(col.r * k, col.g * k, col.b * k, 1);
     }
 
+    // Built from points: Context2D.ellipse() mangles small ellipses (a 3x5
+    // eye came out as a crescent), and Qt applies the transform at fill time,
+    // so a scaled unit arc does not work either.
     function ellipse(c, x, y, rx, ry) {
         c.beginPath();
-        c.ellipse(x - rx, y - ry, rx * 2, ry * 2);
+        for (let i = 0; i < 32; i++) {
+            const a = i / 32 * Math.PI * 2;
+            i === 0 ? c.moveTo(x + rx, y) : c.lineTo(x + rx * Math.cos(a), y + ry * Math.sin(a));
+        }
+        c.closePath();
+    }
+
+    // A rounded square: |x/rx|^n + |y/ry|^n = 1
+    function squircle(c, x, y, rx, ry, n) {
+        c.beginPath();
+        for (let i = 0; i <= 48; i++) {
+            const a = i / 48 * Math.PI * 2;
+            const ca = Math.cos(a), sa = Math.sin(a);
+            const px = x + rx * Math.sign(ca) * Math.pow(Math.abs(ca), 2 / n);
+            const py = y + ry * Math.sign(sa) * Math.pow(Math.abs(sa), 2 / n);
+            i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
+        }
+        c.closePath();
     }
 
     function draw(c, m, e) {
         const fur = root.bodyColor;
-        const dark = "#3d2420";
-        const cream = "#fff6ec";
-        const mark = shade(fur, 0.7);
+        const dark = "#3a2420";
+        const cream = "#fff4e8";
+        const ring = shade(fur, 0.68);
 
         // glow behind, in the mood colour
         if (p.glow > 0.01) {
-            c.globalAlpha = p.glow * 0.35;
-            c.fillStyle = p.glowColor;
-            ellipse(c, 0, 4, 47, 45);
+            const g = c.createRadialGradient(0, 4, 8, 0, 4, 50);
+            g.addColorStop(0, Qt.alpha(p.glowColor, p.glow * 0.55));
+            g.addColorStop(1, Qt.alpha(p.glowColor, 0));
+            c.fillStyle = g;
+            ellipse(c, 0, 4, 50, 50);
             c.fill();
-            c.globalAlpha = 1;
         }
 
         // ground shadow stays put while Maple hops
-        c.fillStyle = "rgba(0,0,0,0.18)";
+        c.fillStyle = "rgba(0,0,0,0.2)";
         const lift = Math.max(0, -p.bob) / 20;
-        ellipse(c, 0, 44, 26 * (1 - lift * 0.4), 3.5 * (1 - lift * 0.4));
+        ellipse(c, 0, 38, 26 * (1 - lift * 0.4), 3.2 * (1 - lift * 0.4));
         c.fill();
 
         c.save();
         c.translate(0, p.bob);
-        // squash about the feet
-        c.translate(0, 42);
+        // squash about the base
+        c.translate(0, 32);
         c.scale(1 + p.squash * 0.6, 1 - p.squash);
-        c.translate(0, -42);
+        c.translate(0, -32);
         c.rotate(p.roll + p.spin);
 
-        // striped tail curling up behind, swaying on its own
-        // Built from overlapping discs along a curve; every other band is dark,
-        // and the tip is dark too, like the real thing.
-        const sway = Math.sin(p.t * 1.8) * 5 + p.arm * 4;
-        for (let i = 0; i <= 22; i++) {
-            const k = i / 22;
-            const tx = 14 + 26 * Math.sin(k * 1.5) + sway * k * k;
-            const ty = 38 - 44 * k + 7 * Math.sin(k * 3.1);
-            c.fillStyle = k > 0.88 || Math.floor(k * 7) % 2 === 1 ? mark : fur;
-            const r = 7.5 + 2.5 * Math.sin(k * Math.PI) - k * 2;
-            ellipse(c, tx, ty, r, r);
+        // a short striped tail peeking out behind, wagging
+        const wag = Math.sin(p.t * 2.2) * 4 + p.arm * 5;
+        for (let i = 0; i <= 5; i++) {
+            const k = i / 5;
+            c.fillStyle = i % 2 === 1 ? ring : fur;
+            ellipse(c, 27 + k * 13 + wag * k * 0.3, 20 - k * 16 + wag * k, 8 - k * 1.5, 8 - k * 1.5);
             c.fill();
         }
 
-        // legs
-        c.fillStyle = dark;
-        for (const sx of [-1, 1]) {
-            ellipse(c, 9 * sx, 40, 6.5, 4.5);
-            c.fill();
-        }
-
-        // body: rusty back, dark chest
-        c.fillStyle = fur;
-        ellipse(c, 0, 28, 20, 15);
-        c.fill();
-        c.fillStyle = dark;
-        ellipse(c, 0, 31, 12, 11);
-        c.fill();
-
-        // arms, hinged at the shoulders: they rise to wave and cheer
-        c.fillStyle = dark;
-        for (const sx of [-1, 1]) {
-            c.save();
-            c.translate(15 * sx, 21);
-            c.rotate(-p.arm * 1.6 * sx);
-            ellipse(c, 0, 8, 5, 9.5);
-            c.fill();
-            c.restore();
-        }
-
-        // ears twitch now and then
+        // round ears, set behind the head
         const twitch = Math.max(0, Math.sin(p.t * 1.1) - 0.93) * 4;
         for (const sx of [-1, 1]) {
             c.save();
-            c.translate(23 * sx, -22);
-            c.rotate((0.35 + (sx > 0 ? twitch : 0)) * sx);
-            c.fillStyle = cream;
-            ellipse(c, 0, -5, 10, 11);
-            c.fill();
+            c.translate(22 * sx, -19);
+            c.rotate((0.25 + (sx > 0 ? twitch : 0)) * sx);
             c.fillStyle = fur;
-            ellipse(c, 0, -4, 8.5, 9.5);
+            ellipse(c, 0, 0, 9, 9);
             c.fill();
             c.fillStyle = dark;
-            ellipse(c, 0, -2.5, 5, 6);
+            ellipse(c, 0, -0.5, 4.8, 4.8);
             c.fill();
             c.restore();
         }
 
-        // head
+        // the body: one soft rounded square, that is all of it
         c.fillStyle = fur;
-        ellipse(c, 0, -2, 33, 27);
+        squircle(c, 0, 4, 34, 28, 3);
         c.fill();
-
-        // the face shifts a little toward the gaze, so the head seems to turn
-        const fx = p.lookX * 4, fy = -p.lookY * 2.5;
-
-        // white mask: cheek patches, brows, muzzle
         c.save();
-        ellipse(c, 0, -2, 33, 27);
+        squircle(c, 0, 4, 34, 28, 3);
         c.clip();
-        c.fillStyle = cream;
-        for (const sx of [-1, 1]) {
-            ellipse(c, 25 * sx + fx * 0.6, 8 + fy, 11, 10);
-            c.fill();
-            ellipse(c, 12 * sx + fx, -15 + fy, 5, 3.4);
-            c.fill();
-        }
-        ellipse(c, fx, 10 + fy, 13, 9.5);
-        c.fill();
-        // tear marks running from each eye down to the muzzle
-        c.fillStyle = mark;
-        for (const sx of [-1, 1]) {
-            c.save();
-            c.translate(14.5 * sx + fx, 8 + fy);
-            c.rotate(-0.35 * sx);
-            ellipse(c, 0, 0, 3.6, 8);
-            c.fill();
-            c.restore();
-        }
-        // soft highlight on the crown
-        c.fillStyle = "rgba(255,255,255,0.16)";
-        ellipse(c, -9, -21, 15, 6);
+        c.fillStyle = "rgba(255,255,255,0.13)";
+        ellipse(c, -6, -20, 30, 10);
         c.fill();
         c.restore();
 
-        // blush
-        c.fillStyle = e === "love" ? "rgba(255,92,138,0.8)" : "rgba(255,120,150,0.55)";
+        const fx = p.lookX * 6, fy = -p.lookY * 4;
+
+        // red-panda brows: two cream dots
+        c.fillStyle = cream;
         for (const sx of [-1, 1]) {
-            ellipse(c, 21 * sx + fx, 9 + fy, 4.5, 3);
+            ellipse(c, 10 * sx + fx, -8 + fy, 3.6, 2.6);
+            c.fill();
+        }
+
+        // blush
+        c.fillStyle = e === "love" ? "rgba(255,92,138,0.8)" : "rgba(255,150,170,0.55)";
+        for (const sx of [-1, 1]) {
+            ellipse(c, 19 * sx + fx, 11 + fy, 4.5, 2.8);
             c.fill();
         }
 
         for (const sx of [-1, 1])
-            drawEye(c, 12 * sx + fx * 1.4, -4 + fy * 1.5, sx, m, e);
+            drawEye(c, 10 * sx + fx, 3 + fy, sx, m, e);
 
-        // nose and mouth
-        const nx = fx * 1.2, ny = 5 + fy;
-        c.fillStyle = dark;
-        c.beginPath();
-        c.moveTo(nx - 3.6, ny - 1.5);
-        c.lineTo(nx + 3.6, ny - 1.5);
-        c.lineTo(nx, ny + 2);
-        c.closePath();
-        c.fill();
+        // mouth only shows when it opens
         if (p.mouth > 0.08) {
-            c.fillStyle = "#7a2a2a";
-            ellipse(c, nx, ny + 5.5, 3 + p.mouth, 1 + p.mouth * 3);
+            c.fillStyle = dark;
+            ellipse(c, fx, 12 + fy, 2.2 + p.mouth * 1.5, 0.8 + p.mouth * 3);
             c.fill();
-            c.fillStyle = "#ff8a9a";
-            ellipse(c, nx, ny + 6 + p.mouth * 1.6, 2 + p.mouth * 0.6, p.mouth * 1.4);
-            c.fill();
-        } else {
-            // the little "ω"
-            c.strokeStyle = dark;
-            c.lineWidth = 1.4;
-            c.lineCap = "round";
-            c.beginPath();
-            c.arc(nx - 2.2, ny + 3, 2.2, 0.1 * Math.PI, 0.95 * Math.PI);
-            c.moveTo(nx + 4.4, ny + 3.3);
-            c.arc(nx + 2.2, ny + 3, 2.2, 0.05 * Math.PI, 0.9 * Math.PI);
-            c.stroke();
         }
 
         c.restore();
+
+        // floating paws: not attached, they bob and wave on their own
+        c.fillStyle = shade(fur, 0.78);
+        for (const sx of [-1, 1]) {
+            const lift = p.arm * (sx < 0 && p.waveLeft > 0 ? 22 : 14);
+            ellipse(c, 41 * sx, 18 - lift + p.bob * 0.9 + Math.sin(p.t * 2 + sx) * 1.2, 5, 5);
+            c.fill();
+        }
     }
 
     function drawEye(c, x, y, sx, m, e) {
@@ -619,12 +577,12 @@ Item {
             c.stroke();
             return;
         }
-        const rx = 4.8 * sc, ry = 6.2 * sc * open;
+        const rx = 3.3 * sc, ry = 4.8 * sc * open;
         ellipse(c, x, y, rx, ry);
         c.fill();
         // catchlights make it look alive
         c.fillStyle = "white";
-        ellipse(c, x + 1.7 * sc, y - ry * 0.4, 1.9 * sc, 2.1 * sc * Math.min(1, open * 1.5));
+        ellipse(c, x + 1 * sc, y - ry * 0.45, 1.1 * sc, 1.3 * sc * Math.min(1, open * 1.5));
         c.fill();
         if (sc > 1.1) {
             ellipse(c, x - 1.2 * sc, y + ry * 0.4, 0.7 * sc, 0.7 * sc);
