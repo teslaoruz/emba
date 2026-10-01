@@ -702,7 +702,10 @@ Item {
         property var taps: []
 
         longPressThreshold: 0.7
-        onDoubleTapped: root.doubleClicked()
+        onDoubleTapped: {
+            taps = [];  // a double-click is a feed, not two-thirds of a dizzy
+            root.doubleClicked();
+        }
         onLongPressed: root.held()
         onTapped: {
             const now = Date.now();

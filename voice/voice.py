@@ -77,7 +77,7 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
             q.get()
         floor = sorted(rms(q.get()) for _ in range(4))[1]
         thr = threshold or max(0.005, floor * 2.5)
-        chunks, preroll, started, quiet, t0 = [], [], False, 0.0, time.time()
+        chunks, preroll, started, quiet, loud, t0 = [], [], False, 0.0, 0, time.time()
         while True:
             block = q.get()
             level = rms(block)
@@ -86,7 +86,9 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
             if level > thr:
                 if not started:
                     chunks = preroll[-3:]  # keep the start of the first word
+                    loud = 0
                 started, quiet = True, 0.0
+                loud += 1
             elif started:
                 quiet += BLOCK / RATE
             if started:
@@ -95,6 +97,10 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
                 preroll.append(block)
                 if time.time() - t0 > max_wait:
                     return None
+            if started and quiet >= silence and loud < 4:
+                # under 0.4 s of sound: a key click or a knock on the desk, not words
+                started, chunks, quiet = False, [], 0.0
+                continue
             if started and (quiet >= silence or len(chunks) * BLOCK / RATE >= max_len):
                 return np.concatenate(chunks)[:, 0]
 
@@ -113,7 +119,7 @@ def transcribe(audio, model):
 def listen():
     model = arg("--model", "base")
     out(state="listening")
-    audio = record()
+    audio = record(max_wait=float(arg("--wait", "6")))
     if audio is not None and arg("--save", None):  # for debugging: keep what was heard
         import wave
         with wave.open(arg("--save", None), "wb") as w:

@@ -29,6 +29,8 @@ Window {
     Island {
         id: island
 
+        objectName: "island"
+
         anchors.fill: parent
         hAlign: win.h / 2
         vAlign: win.v / 2

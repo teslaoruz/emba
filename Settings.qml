@@ -93,8 +93,8 @@ Rectangle {
                     visible: (win.st.ask ?? []).length > 1
                     text: "Ask with"
                     Segmented {
-                        options: (win.st.ask ?? []).map(t => [t, t])
-                        value: App.askTool
+                        options: [["auto", "auto"]].concat((win.st.ask ?? []).map(t => [t, t]))
+                        value: App.cfg.askWith ?? "auto"
                         onPicked: v => App.setCfg({ askWith: v })
                     }
                 }

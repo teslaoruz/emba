@@ -68,7 +68,7 @@ Item {
     // views that stay open after the cursor leaves
     // what you are typing in the ask box; an empty ask box is not worth holding open
     property string draft: ""
-    readonly property bool sticky: ["approval", "result", "file", "drop", "listen", "care"].includes(view) || (view === "ask" && draft !== "") || App.asking || App.voiceState !== ""
+    readonly property bool sticky: ["approval", "result", "file", "drop", "listen"].includes(view) || (view === "ask" && draft !== "") || App.asking || App.voiceState !== ""
 
     function expand(v) {
         forcedView = v ?? "";
@@ -107,6 +107,9 @@ Item {
                 root.expand("limit");
                 autoClose.restart();
             }
+        }
+        function onOpenRequested(open) {
+            open ? root.expand() : root.collapse();
         }
         function onToggleRequested() {
             root.open ? root.collapse() : root.expand();
@@ -267,7 +270,9 @@ Item {
             }
         }
 
-        Item {
+        // a focus scope, so the ask box keeps the keyboard inside it while
+        // Y / N / Escape still reach the island when nothing inside wants them
+        FocusScope {
             id: shape
 
             width: root.target.width
@@ -306,15 +311,17 @@ Item {
                 }
             }
 
-            TapHandler {
-                // closed: open up. On the care view: toss a ball from where you clicked
-                onTapped: eventPoint => {
+            // Clicks on the island's background: closed, it opens; on the care
+            // view, it tosses a ball from there. A MouseArea *behind* the content
+            // (a TapHandler here stole every click from the buttons above it).
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: mouse => {
                     if (!root.open)
                         return root.expand();
-                    const q = eventPoint.position;
-                    const onEmba = q.x >= panda.x && q.x <= panda.x + panda.width && q.y >= panda.y && q.y <= panda.y + panda.height;
-                    if (root.view === "care" && !Pet.napping && !onEmba) {
-                        root.tossX = eventPoint.position.x;
+                    if (root.view === "care" && !Pet.napping) {
+                        root.tossX = mouse.x;
                         Pet.play();
                     }
                 }
@@ -409,12 +416,13 @@ Item {
             Panda {
                 id: panda
 
-                property real px: root.mode === "expanded" ? 96 : root.mode === "peek" ? 70 : root.mode === "compact" ? 46 : 20
+                // sized so the whole drawing (ears, paws, tail, hops) fits each shape
+                property real px: root.mode === "expanded" ? 96 : root.mode === "peek" ? 56 : root.mode === "compact" ? 34 : 20
 
                 width: px
                 height: px
-                x: root.mode === "expanded" ? 12 : root.mode === "compact" ? 2 : (shape.width - px) / 2
-                y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : (shape.height - px) / 2 + (root.mode === "compact" ? 1 : 0)
+                x: root.mode === "expanded" ? 12 : root.mode === "compact" ? 8 : (shape.width - px) / 2
+                y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : (shape.height - px) / 2
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
                 mood: root.mood
@@ -542,7 +550,7 @@ Item {
             // ---- compact: the latest action and a dot per session ----
             Row {
                 anchors.verticalCenter: parent.verticalCenter
-                x: 54
+                x: 50
                 spacing: 8
                 opacity: root.mode === "compact" ? 1 : 0
                 visible: opacity > 0
@@ -586,7 +594,7 @@ Item {
 
                 x: 116
                 y: 16
-                width: shape.width - 132
+                width: shape.width - (root.view === "approval" ? 132 : 156)  // clear of the ✕ and ⚙ column
                 active: root.mode === "expanded"
                 opacity: root.mode === "expanded" ? 1 : 0
                 sourceComponent: ({
@@ -611,31 +619,23 @@ Item {
                 }
             }
 
-            // close button in the corner of every view
-            Text {
+            // close and settings, stacked in the top-right corner, out of the content's way
+            Column {
                 visible: root.mode === "expanded" && root.view !== "approval"
+                opacity: content.opacity
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 12
-                text: "✕"
-                color: closeHover.hovered ? Theme.text : Theme.faint
-                font.pixelSize: 12
+                anchors.rightMargin: 8
+                anchors.topMargin: 8
+                spacing: 2
 
-                HoverHandler { id: closeHover }
-                TapHandler { onTapped: root.collapse() }
-            }
-            Text {
-                visible: root.mode === "expanded" && root.view !== "approval"
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 12
-                text: "⚙"
-                color: gearHover.hovered ? Theme.text : Theme.faint
-                font.pixelSize: 13
-
-                HoverHandler { id: gearHover; cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                    onTapped: {
+                Corner {
+                    glyph: "✕"
+                    onClicked: root.collapse()
+                }
+                Corner {
+                    glyph: "⚙"
+                    onClicked: {
                         App.settingsOpen = true;
                         App.refreshStatus();
                     }
@@ -827,6 +827,28 @@ Item {
         elide: Text.ElideRight
     }
 
+    // a small round icon button for the corner
+    component Corner: Rectangle {
+        id: corner
+
+        property string glyph
+        signal clicked
+
+        width: 24
+        height: 24
+        radius: 12
+        color: Qt.alpha(Theme.text, ch.hovered ? 0.1 : 0)
+
+        Text {
+            anchors.centerIn: parent
+            text: corner.glyph
+            color: ch.hovered ? Theme.text : Theme.faint
+            font.pixelSize: 12
+        }
+        HoverHandler { id: ch; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: corner.clicked() }
+    }
+
     // a word you can click: for everything that is not the main decision
     component Link: Text {
         id: link
@@ -918,6 +940,7 @@ Item {
 
     // looks like a text box; opens the ask view
     component AskField: Rectangle {
+        objectName: "askField"
         Layout.fillWidth: true
         implicitHeight: 32
         radius: 16
@@ -1110,7 +1133,7 @@ Item {
             }
 
             RowLayout {
-                spacing: 6
+                spacing: 10
 
                 Pill {
                     text: "Deny"
@@ -1321,6 +1344,8 @@ Item {
 
                 TextInput {
                     id: input
+
+                    objectName: "askInput"
 
                     anchors.left: parent.left
                     anchors.right: tools.left

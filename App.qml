@@ -823,6 +823,7 @@ Singleton {
     signal toggleRequested
     signal askRequested
     signal careRequested
+    signal openRequested(bool open)
     signal answerRequested
     signal snapshotRequested(string path)
 
@@ -830,6 +831,10 @@ Singleton {
     // socket (the `emba` CLI, any OS) or Quickshell's IPC (keybinds on Linux).
     function command(cmd, args) {
         switch (cmd) {
+        case "open":
+        case "close":
+            root.openRequested(cmd === "open");
+            return "ok";
         case "toggle":
             root.toggleRequested();
             return "ok";
