@@ -18,6 +18,8 @@ Item {
     property var gaze: null
     // 0..1 loudness while Emba speaks; opens the mouth in time with the voice
     property real talk: 0
+    // something tasty is being dragged closer
+    property bool eager: false
 
     signal clicked
     // the cursor rubbed back and forth over Emba
@@ -236,6 +238,11 @@ Item {
         if (p.waveLeft > 0) {
             p.waveLeft -= dt;
             arm = 0.7 + Math.sin(t * 24) * 0.45;
+        }
+        if (root.eager) {
+            mouth = 0.85;
+            eyeScale = Math.max(eyeScale, 1.2);
+            arm = 0.45 + Math.sin(t * 9) * 0.1;
         }
         if (p.mouthHold > 0) {
             p.mouthHold -= dt;

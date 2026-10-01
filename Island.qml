@@ -66,6 +66,7 @@ Item {
         leaveTimer.stop();
     }
     function collapse() {
+        App.followUp = false;
         open = false;
         forcedView = "";
         files = [];
@@ -96,6 +97,9 @@ Item {
         }
         function onToggleRequested() {
             root.open ? root.collapse() : root.expand();
+        }
+        function onAnswerRequested() {
+            root.expand("result");
         }
         function onCareRequested() {
             root.expand("care");
@@ -288,7 +292,11 @@ Item {
             }
 
             // files dragged in from a file manager
+            // Files dragged in: Emba opens wide and watches them; on drop the
+            // file flies into its mouth and it gulps.
             DropArea {
+                id: dropZone
+
                 anchors.fill: parent
                 onEntered: drag => {
                     root.dragging = true;
@@ -300,12 +308,71 @@ Item {
                 }
                 onDropped: drop => {
                     root.dragging = false;
-                    const paths = drop.urls.map(u => decodeURIComponent(String(u).replace(/^file:\/\//, ""))).filter(p => p.startsWith("/"));
+                    panda.emote("", 0);
+                    // file:///home/x -> /home/x, file:///C:/x -> C:/x
+                    const paths = drop.urls.map(u => decodeURIComponent(String(u).replace(/^file:\/\/(\/[A-Za-z]:)/, "$1").replace(/^\/([A-Za-z]:)/, "$1").replace(/^file:\/\//, ""))).filter(p => p.startsWith("/") || /^[A-Za-z]:/.test(p));
                     if (!paths.length)
                         return;
                     root.files = paths;
-                    panda.gulp();
-                    root.expand("file");
+                    swallow.from = Qt.point(drop.x, drop.y);
+                    swallow.restart();
+                }
+            }
+
+            // the file on its way in
+            Rectangle {
+                id: morsel
+
+                visible: swallow.running
+                width: 18
+                height: 22
+                radius: 3
+                color: "#f4f1ea"
+                border.width: 1
+                border.color: Qt.alpha("#000000", 0.2)
+
+                // folded corner
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    width: 6
+                    height: 6
+                    color: "#d9d4c7"
+                }
+                Repeater {
+                    model: 3
+
+                    Rectangle {
+                        required property int index
+
+                        x: 3
+                        y: 8 + index * 4
+                        width: 11 - index * 2
+                        height: 1.5
+                        color: "#b8b2a3"
+                    }
+                }
+
+                SequentialAnimation {
+                    id: swallow
+
+                    property point from
+
+                    PropertyAction { target: morsel; property: "x"; value: swallow.from.x - 9 }
+                    PropertyAction { target: morsel; property: "y"; value: swallow.from.y - 11 }
+                    PropertyAction { target: morsel; property: "scale"; value: 1 }
+                    ParallelAnimation {
+                        NumberAnimation { target: morsel; property: "x"; to: panda.x + panda.width / 2 - 9; duration: 380; easing.type: Easing.InBack }
+                        NumberAnimation { target: morsel; property: "y"; to: panda.y + panda.height * 0.55 - 11; duration: 380; easing.type: Easing.InQuad }
+                        NumberAnimation { target: morsel; property: "scale"; to: 0.25; duration: 380; easing.type: Easing.InQuad }
+                        NumberAnimation { target: morsel; property: "rotation"; from: -20; to: 200; duration: 380 }
+                    }
+                    ScriptAction {
+                        script: {
+                            panda.gulp();
+                            root.expand("file");
+                        }
+                    }
                 }
             }
 
@@ -323,6 +390,7 @@ Item {
                 running: root.mode !== "hidden"
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
+                eager: root.dragging
                 bodyColor: App.cfg.color
 
                 Behavior on px { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
@@ -330,7 +398,7 @@ Item {
                 Behavior on y { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                gaze: toy.visible ? Qt.point(toy.x + toy.width / 2 - x - width / 2, toy.y + toy.height / 2 - y - height / 2) : hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
+                gaze: dropZone.containsDrag ? Qt.point(dropZone.drag.x - x - width / 2, dropZone.drag.y - y - height / 2) : toy.visible ? Qt.point(toy.x + toy.width / 2 - x - width / 2, toy.y + toy.height / 2 - y - height / 2) : hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
 
                 onClicked: Pet.napping ? Pet.nap() : !root.open ? root.expand() : root.view === "care" ? boop() : root.expand("care")
                 onDoubleClicked: {
@@ -664,6 +732,61 @@ Item {
     }
 
     // ================================================================ views
+    // Kept deliberately quiet: one line of title, the content, and at most a
+    // couple of small actions. Words a person would use, not tool names.
+
+    // "Edit Invoice.swift" -> "editing Invoice.swift"
+    function plain(line) {
+        if (!line)
+            return "";
+        if (line.startsWith("› "))
+            return `asked: ${line.slice(2)}`;
+        if (line.startsWith("needs you: "))
+            return line;
+        const sp = line.indexOf(" ");
+        const tool = sp < 0 ? line : line.slice(0, sp);
+        const what = sp < 0 ? "" : line.slice(sp + 1);
+        const verb = ({
+                Bash: "running",
+                shell: "running",
+                Edit: "editing",
+                MultiEdit: "editing",
+                Write: "writing",
+                write: "writing",
+                edit: "editing",
+                apply_patch: "editing",
+                Read: "reading",
+                read: "reading",
+                Grep: "searching for",
+                Glob: "looking for",
+                grep: "searching for",
+                glob: "looking for",
+                WebFetch: "reading",
+                WebSearch: "searching the web for",
+                Task: "asking a helper:",
+                TodoWrite: "planning",
+                NotebookEdit: "editing"
+            })[tool];
+        return verb ? `${verb} ${what}`.trim() : line;
+    }
+
+    // what a permission request is asking for, in words
+    function asks(tool) {
+        return ({
+                Bash: "wants to run a command",
+                shell: "wants to run a command",
+                bash: "wants to run a command",
+                Edit: "wants to edit a file",
+                MultiEdit: "wants to edit a file",
+                Write: "wants to create a file",
+                edit: "wants to edit a file",
+                write: "wants to create a file",
+                apply_patch: "wants to change files",
+                WebFetch: "wants to open a web page",
+                webfetch: "wants to open a web page",
+                external_directory: "wants to go outside the project"
+            })[tool] ?? `wants to use ${tool}`;
+    }
 
     component Label: Text {
         color: Theme.text
@@ -677,20 +800,34 @@ Item {
         elide: Text.ElideRight
     }
 
+    // a word you can click: for everything that is not the main decision
+    component Link: Text {
+        id: link
+
+        signal clicked
+
+        color: lh.hovered ? Theme.text : Theme.dim
+        font.pixelSize: 12
+        font.underline: lh.hovered
+
+        HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: link.clicked() }
+    }
+
     component Pill: Rectangle {
         id: pill
 
         property string text
-        property string key
         property bool primary
         // voice pointed at this button: it pulses, but still needs a click
         property bool hinted
+        readonly property bool hovered: ph.hovered
         signal clicked
 
-        implicitWidth: row.implicitWidth + 24
+        implicitWidth: label.implicitWidth + 28
         implicitHeight: 30
         radius: 15
-        color: primary ? (ph.hovered ? Qt.lighter(Theme.primary, 1.08) : Theme.primary) : Qt.alpha(Theme.text, ph.hovered ? 0.15 : 0.09)
+        color: primary ? (ph.hovered ? Qt.lighter(Theme.primary, 1.08) : Theme.primary) : Qt.alpha(Theme.text, ph.hovered ? 0.15 : 0.08)
         scale: tap.pressed ? 0.94 : hinted ? hintPulse.value : 1
         border.width: hinted ? 2 : 0
         border.color: Theme.warn
@@ -711,48 +848,27 @@ Item {
         Behavior on scale { NumberAnimation { duration: 90 } }
         Behavior on color { ColorAnimation { duration: 120 } }
 
-        Row {
-            id: row
+        Text {
+            id: label
 
             anchors.centerIn: parent
-            spacing: 6
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: pill.text
-                color: pill.primary ? Theme.onPrimary : Theme.text
-                font.pixelSize: 13
-                font.weight: Font.Medium
-            }
-            Rectangle {
-                visible: pill.key !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                width: 16
-                height: 16
-                radius: 4
-                color: "transparent"
-                border.width: 1
-                border.color: pill.primary ? Qt.alpha(Theme.onPrimary, 0.25) : Qt.alpha(Theme.text, 0.25)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: pill.key
-                    color: pill.primary ? Theme.onPrimary : Theme.dim
-                    font.pixelSize: 10
-                    font.weight: Font.DemiBold
-                }
-            }
+            text: pill.text
+            color: pill.primary ? Theme.onPrimary : Theme.text
+            font.pixelSize: 13
+            font.weight: Font.Medium
         }
 
         HoverHandler { id: ph; cursorShape: Qt.PointingHandCursor }
         TapHandler { id: tap; onTapped: pill.clicked() }
     }
 
-    component Header: RowLayout {
+    component Title: RowLayout {
         property string title
         property string sub
         property color dot: Theme.dim
 
+        Layout.fillWidth: true
+        Layout.rightMargin: 18
         spacing: 6
 
         Rectangle {
@@ -773,30 +889,50 @@ Item {
         }
     }
 
+    // looks like a text box; opens the ask view
+    component AskField: Rectangle {
+        Layout.fillWidth: true
+        implicitHeight: 32
+        radius: 16
+        color: Qt.alpha(Theme.text, af.hovered ? 0.09 : 0.05)
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            x: 14
+            text: `Ask ${App.askLabel}…`
+            color: Theme.faint
+            font.pixelSize: 13
+        }
+        HoverHandler { id: af; cursorShape: Qt.IBeamCursor }
+        TapHandler { onTapped: root.expand("ask") }
+    }
+
+    QtObject {
+        id: shimmer
+
+        property real value: 1
+
+        SequentialAnimation on value {
+            loops: Animation.Infinite
+            NumberAnimation { to: 0.5; duration: 1100; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: 1100; easing.type: Easing.InOutSine }
+        }
+    }
+
+    // ---- what's going on ----
     Component {
         id: overviewView
 
         ColumnLayout {
             spacing: 6
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: root.sessions.length === 1 ? "1 session" : `${root.sessions.length} sessions`
-                sub: {
-                    const l = App.limits;
-                    const parts = [];
-                    if (l.five_hour)
-                        parts.push(`5h ${l.five_hour.used}%`);
-                    if (l.seven_day)
-                        parts.push(`7d ${l.seven_day.used}%`);
-                    return parts.join(" · ");
-                }
+            Title {
+                title: root.sessions.length === 1 ? "Working on 1 thing" : `Working on ${root.sessions.length} things`
                 dot: Theme.ok
             }
 
             Repeater {
-                model: root.sessions.slice(0, 5)
+                model: root.sessions.slice(0, 4)
 
                 Rectangle {
                     id: srow
@@ -806,61 +942,40 @@ Item {
                     Layout.fillWidth: true
                     implicitHeight: 40
                     radius: 12
-                    color: Qt.alpha(Theme.text, rh.hovered ? 0.08 : 0.04)
+                    color: Qt.alpha(Theme.text, rh.hovered ? 0.07 : 0.035)
 
                     HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: App.focus(srow.modelData.sid) }
 
                     Rectangle {
-                        x: 10
+                        x: 12
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 8
-                        height: 8
+                        width: 7
+                        height: 7
                         radius: 4
                         color: App.stateColours[srow.modelData.state] ?? Theme.dim
-
-                        SequentialAnimation on opacity {
-                            running: ["working", "thinking", "waiting"].includes(srow.modelData.state)
-                            loops: Animation.Infinite
-                            alwaysRunToEnd: true
-                            NumberAnimation { to: 0.3; duration: 600 }
-                            NumberAnimation { to: 1; duration: 600 }
-                        }
+                        opacity: ["working", "thinking", "waiting"].includes(srow.modelData.state) ? shimmer.value : 1
                     }
 
                     Column {
-                        x: 26
+                        x: 27
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - 36
+                        width: parent.width - 37
 
                         Text {
                             width: parent.width
-                            text: `${srow.modelData.name} · ${srow.modelData.agent ?? "claude"}`
+                            text: srow.modelData.name
                             color: Theme.text
                             font.pixelSize: 13
-                            font.weight: Font.DemiBold
+                            font.weight: Font.Medium
                             elide: Text.ElideRight
                         }
                         Dim {
                             width: parent.width
-                            text: srow.modelData.ticker.slice(-1)[0] ?? srow.modelData.state
-                            font.family: "monospace"
+                            text: root.plain(srow.modelData.ticker.slice(-1)[0]) || "ready"
                             font.pixelSize: 11
-                            opacity: srow.modelData.state === "working" ? shimmer.value : 1
                         }
                     }
-                }
-            }
-
-            QtObject {
-                id: shimmer
-
-                property real value: 1
-
-                SequentialAnimation on value {
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 0.55; duration: 1100; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: 1; duration: 1100; easing.type: Easing.InOutSine }
                 }
             }
 
@@ -880,32 +995,11 @@ Item {
                 }
             }
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: 6
-
-                Pill {
-                    text: `Ask ${App.askLabel}`
-                    onClicked: root.expand("ask")
-                }
-                Pill {
-                    text: "⛶ Look"
-                    onClicked: App.look()
-                }
-                Repeater {
-                    model: App.actionsFor(root.sessions[0]?.sid ?? "")
-
-                    Pill {
-                        required property var modelData
-
-                        text: modelData.label
-                        onClicked: Quickshell.execDetached(modelData.argv)
-                    }
-                }
-            }
+            AskField {}
         }
     }
 
+    // ---- nothing running ----
     Component {
         id: emptyView
 
@@ -918,34 +1012,30 @@ Item {
             spacing: 10
 
             Label {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                text: empty.connected ? "Nothing running right now." : "Hi, I'm Emba!"
-                font.pixelSize: 14
+                Layout.topMargin: 6
+                text: empty.connected ? "All quiet." : "Hi, I'm Emba!"
+                font.pixelSize: 15
+                font.weight: Font.Medium
             }
             Dim {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: empty.connected ? "Start an agent in a terminal, or ask here." : "Connect me to your coding agents (Claude Code, Codex, opencode, Gemini) and I'll watch your sessions and ask before anything runs."
+                visible: !empty.connected
+                text: "Let me keep an eye on your coding agents."
             }
-            Row {
-                spacing: 6
-
-                Pill {
-                    visible: !empty.connected
-                    text: App.busy ? "Connecting…" : "Connect"
-                    primary: true
-                    onClicked: App.run(["connect"])
-                }
-                Pill {
-                    text: `Ask ${App.askLabel}`
-                    primary: empty.connected
-                    onClicked: root.expand("ask")
-                }
+            Pill {
+                visible: !empty.connected
+                text: App.busy ? "Connecting…" : "Connect"
+                primary: true
+                onClicked: App.run(["connect"])
+            }
+            AskField {
+                visible: empty.connected
             }
         }
     }
 
+    // ---- an agent asks before doing something ----
     Component {
         id: approvalView
 
@@ -957,18 +1047,15 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
 
-                Header {
-                    Layout.fillWidth: true
-                    title: root.pending[0] ? `${root.pending[0].name} · ${root.pending[0].agent}` : ""
-                    sub: root.pending.length > 1 ? `wants to use ${root.pending[0]?.tool} · 1 of ${root.pending.length}` : `wants to use ${root.pending[0]?.tool}`
+                Title {
+                    Layout.rightMargin: 0
+                    title: parent.parent.req?.name ?? ""
+                    sub: root.asks(parent.parent.req?.tool ?? "") + (root.pending.length > 1 ? `  (1 of ${root.pending.length})` : "")
                     dot: Theme.warn
                 }
-                Dim {
+                Link {
                     text: "terminal ↗"
-                    color: th.hovered ? Theme.text : Theme.dim
-
-                    HoverHandler { id: th; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: App.focus(root.pending[0]?.sid ?? "") }
+                    onClicked: App.focus(root.pending[0]?.sid ?? "")
                 }
             }
 
@@ -977,8 +1064,6 @@ Item {
                 implicitHeight: Math.min(code.implicitHeight, 110) + 18
                 radius: 12
                 color: Theme.surface
-                border.width: 1
-                border.color: Qt.alpha(Theme.text, 0.05)
                 clip: true
 
                 Text {
@@ -1002,32 +1087,34 @@ Item {
 
                 Pill {
                     text: "Deny"
-                    key: "N"
                     hinted: App.voiceHint === "deny"
                     onClicked: root.decide("deny")
                 }
                 Pill {
+                    id: always
+
                     visible: root.pending[0]?.always ?? false
                     text: "Always"
                     onClicked: root.decide("allow", true)
                 }
                 Pill {
                     text: "Allow"
-                    key: "Y"
-                    hinted: App.voiceHint === "allow"
                     primary: true
+                    hinted: App.voiceHint === "allow"
                     onClicked: root.decide("allow")
                 }
             }
+            // what "Always" would remember, shown only while you point at it
             Dim {
                 Layout.fillWidth: true
-                visible: !!root.pending[0]?.rule
-                text: `Always adds ${root.pending[0]?.rule ?? ""}`
+                visible: always.hovered && !!root.pending[0]?.rule
+                text: `from now on allows ${root.pending[0]?.rule ?? ""}`
                 font.pixelSize: 11
             }
         }
     }
 
+    // ---- a session finished ----
     Component {
         id: finishedView
 
@@ -1036,26 +1123,26 @@ Item {
 
             spacing: 8
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
+            Title {
                 title: parent.sess?.name ?? "Your agent"
                 sub: "is done"
                 dot: Theme.ok
             }
             Label {
                 Layout.fillWidth: true
-                text: parent.sess?.text || "Finished."
+                visible: text !== ""
+                text: parent.sess?.text ?? ""
                 color: Theme.dim
                 font.pixelSize: 12
                 maximumLineCount: 4
                 elide: Text.ElideRight
             }
-            RowLayout {
-                spacing: 6
+            Flow {
+                Layout.fillWidth: true
+                spacing: 14
 
-                Pill {
-                    text: "Show terminal"
+                Link {
+                    text: "open terminal ↗"
                     onClicked: {
                         App.focus(root.finishedSid);
                         root.collapse();
@@ -1064,39 +1151,31 @@ Item {
                 Repeater {
                     model: App.actionsFor(root.finishedSid)
 
-                    Pill {
+                    Link {
                         required property var modelData
 
-                        text: modelData.label
+                        text: modelData.label.toLowerCase()
                         onClicked: Quickshell.execDetached(modelData.argv)
                     }
-                }
-                Pill {
-                    text: "OK"
-                    primary: true
-                    onClicked: root.collapse()
                 }
             }
         }
     }
 
+    // ---- close to a usage limit ----
     Component {
         id: limitView
 
         ColumnLayout {
-            readonly property var five: App.limits.five_hour
-            readonly property var week: App.limits.seven_day
-
             spacing: 8
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: "Usage is getting high"
+            Title {
+                title: "Running low"
+                sub: App.modelLabel ?? ""
                 dot: Theme.limit
             }
             Repeater {
-                model: [["5-hour window", parent.five], ["This week", parent.week]].filter(x => x[1])
+                model: [["Right now", App.limits.five_hour], ["This week", App.limits.seven_day]].filter(x => x[1])
 
                 ColumnLayout {
                     required property var modelData
@@ -1105,12 +1184,13 @@ Item {
                     spacing: 3
 
                     RowLayout {
-                        Dim { text: modelData[0]; Layout.fillWidth: true }
-                        Text {
-                            text: `${modelData[1].used}%`
-                            color: modelData[1].used >= 90 ? Theme.error : modelData[1].used >= App.cfg.limitWarn ? Theme.limit : Theme.text
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
+                        Dim {
+                            Layout.fillWidth: true
+                            text: modelData[0]
+                        }
+                        Dim {
+                            text: modelData[1].resets ? `back ${Qt.formatDateTime(new Date(modelData[1].resets * 1000), "ddd h:mm ap")}` : ""
+                            font.pixelSize: 11
                         }
                     }
                     Rectangle {
@@ -1126,46 +1206,35 @@ Item {
                             color: modelData[1].used >= 90 ? Theme.error : Theme.limit
                         }
                     }
-                    Dim {
-                        visible: !!modelData[1].resets
-                        text: modelData[1].resets ? `resets ${Qt.formatDateTime(new Date(modelData[1].resets * 1000), "ddd h:mm ap")}` : ""
-                    }
                 }
             }
         }
     }
 
+    // ---- ask ----
     Component {
         id: askView
 
         ColumnLayout {
             spacing: 8
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: `Ask ${App.askLabel}`
-                sub: "on your own account"
-                dot: Theme.thinking
-            }
-
-            // switch who answers; only tools that are installed show up
+            // who answers: only tools that are installed show up
             Flow {
                 Layout.fillWidth: true
+                Layout.rightMargin: 18
                 spacing: 4
-                visible: (App.status.ask ?? []).length > 1
 
                 Repeater {
-                    model: App.status.ask ?? []
+                    model: (App.status.ask ?? []).length ? App.status.ask : [App.askTool]
 
                     Rectangle {
                         required property string modelData
                         readonly property bool on: App.askTool === modelData
 
-                        width: chip.implicitWidth + 16
-                        height: 22
-                        radius: 11
-                        color: on ? Theme.thinking : Qt.alpha(Theme.text, chipHover.hovered ? 0.12 : 0.06)
+                        width: chip.implicitWidth + 18
+                        height: 24
+                        radius: 12
+                        color: on ? Theme.primary : Qt.alpha(Theme.text, chipHover.hovered ? 0.1 : 0.05)
 
                         Behavior on color { ColorAnimation { duration: 140 } }
 
@@ -1175,7 +1244,7 @@ Item {
                             anchors.centerIn: parent
                             text: parent.modelData
                             color: parent.on ? Theme.onPrimary : Theme.dim
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.weight: parent.on ? Font.DemiBold : Font.Normal
                         }
                         HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
@@ -1184,6 +1253,7 @@ Item {
                 }
             }
 
+            // attached files and screenshots
             Flow {
                 Layout.fillWidth: true
                 spacing: 4
@@ -1205,7 +1275,7 @@ Item {
 
                             anchors.centerIn: parent
                             width: Math.min(implicitWidth, 184)
-                            text: modelData.split("/").pop()
+                            text: modelData.split(/[\\/]/).pop()
                             color: Theme.dim
                             font.pixelSize: 11
                             elide: Text.ElideMiddle
@@ -1216,19 +1286,20 @@ Item {
 
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 38
-                radius: 19
+                implicitHeight: 40
+                radius: 20
                 color: Theme.surface
                 border.width: 1
-                border.color: input.activeFocus ? Qt.alpha(Theme.text, 0.18) : Qt.alpha(Theme.text, 0.06)
+                border.color: input.activeFocus ? Qt.alpha(Theme.text, 0.2) : Qt.alpha(Theme.text, 0.06)
 
                 TextInput {
                     id: input
 
-                    anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 14
-                    verticalAlignment: TextInput.AlignVCenter
+                    anchors.left: parent.left
+                    anchors.right: tools.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 8
                     color: Theme.text
                     font.pixelSize: 13
                     clip: true
@@ -1244,72 +1315,180 @@ Item {
                     Text {
                         visible: !input.text
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.files.length ? "What about it?" : "Ask anything…"
+                        text: root.files.length ? "What about it?" : `Ask ${App.askLabel}…`
                         color: Theme.faint
                         font.pixelSize: 13
                     }
                 }
-            }
-            RowLayout {
-                spacing: 6
 
-                Pill {
-                    visible: !!App.cfg.voice
-                    text: "🎤 Talk"
-                    onClicked: App.listen()
+                // talk, or point at something on screen
+                Row {
+                    id: tools
+
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 10
+
+                    Link {
+                        visible: !!App.cfg.voice
+                        text: "🎤"
+                        font.pixelSize: 15
+                        onClicked: App.listen()
+                    }
+                    Link {
+                        text: "⛶"
+                        font.pixelSize: 16
+                        onClicked: App.look()
+                    }
                 }
-                Pill {
-                    text: "⛶ Look at screen"
-                    onClicked: App.look()
+            }
+        }
+    }
+
+    // ---- the answer ----
+    Component {
+        id: resultView
+
+        ColumnLayout {
+            spacing: 8
+
+            Title {
+                title: App.asking ? `${App.askLabel} is thinking…` : App.askError ? "That didn't work" : App.askLabel
+                sub: App.heard ? `“${App.heard}”` : ""
+                dot: App.askError ? Theme.error : Theme.thinking
+                opacity: App.asking ? shimmer.value : 1
+            }
+
+            Flickable {
+                Layout.fillWidth: true
+                implicitHeight: Math.min(answer.implicitHeight, 210)
+                contentHeight: answer.implicitHeight
+                clip: true
+                visible: !App.asking
+
+                TextEdit {
+                    id: answer
+
+                    width: parent.width
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    text: App.askError || App.answer
+                    color: App.askError ? Theme.error : Theme.text
+                    font.pixelSize: 13
+                    textFormat: TextEdit.MarkdownText
                 }
-                Dim {
-                    Layout.fillWidth: true
-                    text: "Esc closes"
-                    font.pixelSize: 11
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 14
+
+                Link {
+                    visible: App.asking
+                    text: "stop"
+                    onClicked: App.cancelAsk()
+                }
+                Link {
+                    visible: !App.asking && !App.askError
+                    text: "copy"
+                    onClicked: root.copy(App.answer)
+                }
+                Link {
+                    visible: !App.asking && !App.askError
+                    text: "follow up"
+                    onClicked: {
+                        App.followUp = true;
+                        root.files = [];
+                        root.expand("ask");
+                    }
+                }
+                Link {
+                    visible: !App.asking && !App.askError && App.canContinue
+                    text: "continue in terminal ↗"
+                    onClicked: App.continueInTerminal()
+                }
+            }
+        }
+    }
+
+    // ---- files dropped on Emba ----
+    Component {
+        id: fileView
+
+        ColumnLayout {
+            spacing: 8
+
+            Title {
+                title: root.files.length === 1 ? root.files[0].split(/[\\/]/).pop() : `${root.files.length} files`
+                dot: Theme.ok
+            }
+            AskField {}
+            Link {
+                text: "copy path"
+                onClicked: {
+                    root.copy(root.files.join(" "));
+                    root.collapse();
                 }
             }
         }
     }
 
     Component {
-        id: careView
+        id: dropView
 
-        ColumnLayout {
-            spacing: 10
+        Rectangle {
+            implicitHeight: 96
+            radius: 16
+            color: Qt.alpha(Theme.ok, 0.08)
+            border.width: 1.5
+            border.color: Theme.ok
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: "Emba"
-                sub: root.petNote || (Pet.napping ? "is napping. Shh…" : {
-                    hungry: "is hungry",
-                    sleepy: "is getting sleepy",
-                    lonely: "missed you"
-                }[Pet.need] ?? "is happy you're here")
-                dot: Pet.need ? Theme.warn : Theme.ok
-            }
-
-            // no buttons: Emba is looked after with the mouse (and voice)
-            Dim {
-                Layout.fillWidth: true
-                text: Pet.napping ? "Click Emba to wake it up." : "Rub to pet · double-click to feed · click here to toss a ball · hold to tuck in"
-                wrapMode: Text.Wrap
-                font.pixelSize: 11
+            Label {
+                anchors.centerIn: parent
+                text: "Feed it to Emba"
+                color: Theme.ok
             }
         }
     }
 
+    // ---- looking after Emba ----
+    Component {
+        id: careView
+
+        ColumnLayout {
+            spacing: 8
+
+            Title {
+                title: "Emba"
+                sub: root.petNote || (Pet.napping ? "is napping" : {
+                        hungry: "is hungry",
+                        sleepy: "is sleepy",
+                        lonely: "missed you"
+                    }[Pet.need] ?? "is happy")
+                dot: Pet.need ? Theme.warn : Theme.ok
+            }
+            // no buttons: Emba is looked after with the mouse (and voice)
+            Dim {
+                Layout.fillWidth: true
+                text: Pet.napping ? "Click to wake." : "Rub to pet · double-click to feed\nclick here to throw a ball · hold to tuck in"
+                wrapMode: Text.Wrap
+                font.pixelSize: 11
+                lineHeight: 1.2
+            }
+        }
+    }
+
+    // ---- listening ----
     Component {
         id: listenView
 
         ColumnLayout {
             spacing: 10
 
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
+            Title {
                 title: App.voiceState === "thinking" ? "Got it…" : App.voiceError ? "Didn't catch that" : "Listening"
-                sub: App.voiceError || (App.voiceState === "listening" ? "talk, then pause" : "")
                 dot: App.voiceError ? Theme.error : Theme.working
             }
 
@@ -1337,160 +1516,19 @@ Item {
                 }
             }
 
-            Label {
+            Flow {
                 Layout.fillWidth: true
-                visible: App.heard !== ""
-                text: `“${App.heard}”`
-                color: Theme.dim
-                font.italic: true
-            }
+                spacing: 14
+                visible: App.voiceState === ""
 
-            RowLayout {
-                spacing: 6
-
-                Pill {
-                    visible: App.voiceState === ""
-                    text: "Try again"
-                    primary: true
+                Link {
+                    text: "try again"
                     onClicked: App.listen()
                 }
-                Pill {
-                    text: "Type instead"
+                Link {
+                    text: "type instead"
                     onClicked: root.expand("ask")
                 }
-            }
-        }
-    }
-
-    Component {
-        id: resultView
-
-        ColumnLayout {
-            spacing: 8
-
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: App.asking ? `${App.askLabel} is thinking…` : App.askError ? "Something went wrong" : `${App.askLabel} says`
-                dot: App.askError ? Theme.error : Theme.thinking
-                opacity: App.asking ? shimmer2.value : 1
-
-                QtObject {
-                    id: shimmer2
-
-                    property real value: 1
-
-                    SequentialAnimation on value {
-                        loops: Animation.Infinite
-                        running: App.asking
-                        NumberAnimation { to: 0.4; duration: 800 }
-                        NumberAnimation { to: 1; duration: 800 }
-                    }
-                }
-            }
-
-            Dim {
-                Layout.fillWidth: true
-                visible: App.heard !== ""
-                text: `you said: “${App.heard}”`
-                font.italic: true
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
-            }
-
-            Flickable {
-                Layout.fillWidth: true
-                implicitHeight: Math.min(answer.implicitHeight, 200)
-                contentHeight: answer.implicitHeight
-                clip: true
-                visible: !App.asking
-
-                TextEdit {
-                    id: answer
-
-                    width: parent.width
-                    readOnly: true
-                    selectByMouse: true
-                    wrapMode: TextEdit.Wrap
-                    text: App.askError || App.answer
-                    color: App.askError ? Theme.error : Theme.text
-                    font.pixelSize: 13
-                    textFormat: TextEdit.MarkdownText
-                }
-            }
-
-            RowLayout {
-                spacing: 6
-                visible: !App.asking
-
-                Pill {
-                    text: "Copy"
-                    onClicked: root.copy(App.answer)
-                }
-                Pill {
-                    text: "Ask again"
-                    onClicked: root.expand("ask")
-                }
-                Pill {
-                    text: "Close"
-                    primary: true
-                    onClicked: root.collapse()
-                }
-            }
-            Pill {
-                visible: App.asking
-                text: "Stop"
-                onClicked: App.cancelAsk()
-            }
-        }
-    }
-
-    Component {
-        id: fileView
-
-        ColumnLayout {
-            spacing: 8
-
-            Header {
-                Layout.fillWidth: true
-                Layout.rightMargin: 18
-                title: root.files.length === 1 ? root.files[0].split("/").pop() : `${root.files.length} files`
-                sub: "Emba has it"
-                dot: Theme.ok
-            }
-            RowLayout {
-                spacing: 6
-
-                Pill {
-                    text: "Ask about it"
-                    primary: true
-                    onClicked: root.forcedView = "ask"
-                }
-                Pill {
-                    text: "Copy path"
-                    onClicked: {
-                        root.copy(root.files.join(" "));
-                        root.collapse();
-                    }
-                }
-            }
-        }
-    }
-
-    Component {
-        id: dropView
-
-        Rectangle {
-            implicitHeight: 96
-            radius: 16
-            color: Qt.alpha(Theme.ok, 0.08)
-            border.width: 1.5
-            border.color: Theme.ok
-
-            Label {
-                anchors.centerIn: parent
-                text: "Drop it here"
-                color: Theme.ok
             }
         }
     }

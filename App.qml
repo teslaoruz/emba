@@ -456,19 +456,85 @@ Singleton {
         }
     }
 
+    // The conversation so far, so a follow-up continues it, and so it can be
+    // picked up in the agent's own terminal. { tool, id, cwd, turns: [{q, a}] }
+    property var chat: null
+    property bool followUp: false
+    property real answeredAt: 0
+    readonly property string modelLabel: limits.model ?? ""
+    readonly property bool canContinue: !!chat && chat.tool !== "ollama" && (chat.tool !== "claude" || !!chat.id)
+
     function ask(prompt, files) {
         if (!prompt.trim() || asking)
             return;
-        const text = files?.length ? `Files:\n${files.join("\n")}\n\n${prompt}` : prompt;
+        const cont = followUp && chat && chat.tool === askTool;
+        followUp = false;
+        if (!cont)
+            chat = {
+                tool: askTool,
+                id: "",
+                cwd: files?.length === 1 ? files[0].replace(/[\\/][^\\/]*$/, "") : (sessions[0]?.cwd || Quickshell.env("HOME") || Quickshell.env("USERPROFILE")),
+                turns: []
+            };
+        let text = files?.length ? `Files:\n${files.join("\n")}\n\n${prompt}` : prompt;
+        let cmd;
+        if (cont && askTool === "claude" && chat.id)
+            cmd = askCommand("claude", text, files).concat(["--resume", chat.id]);
+        else if (cont && askTool === "opencode")
+            cmd = askCommand("opencode", text, files).concat(["--continue"]);
+        else {
+            // tools without a resume flag get the conversation so far as context
+            if (cont && chat.turns.length)
+                text = chat.turns.map(t => `Me: ${t.q}\nYou: ${t.a}`).join("\n\n") + `\n\nMe: ${text}`;
+            cmd = askCommand(askTool, text, files);
+        }
+        if (askTool === "claude")
+            cmd = cmd.concat(["--output-format", "json"]);  // for the session id
+        chat.pending = prompt;
         answer = "";
         askError = "";
         errText = "";
         askCode = null;
         asking = true;
-        askProc.command = askCommand(askTool, text, files);
-        // tools without an --add-dir style flag read files relative to here
-        askProc.workingDirectory = files?.length === 1 ? files[0].replace(/[\\/][^\\/]*$/, "") : (sessions[0]?.cwd || Quickshell.env("HOME") || Quickshell.env("USERPROFILE"));
+        askProc.command = cmd;
+        askProc.workingDirectory = chat.cwd;
         askProc.running = true;
+    }
+
+    function gotAnswer(out) {
+        let text = out.trim();
+        if (chat?.tool === "claude") {
+            try {
+                const j = JSON.parse(text);
+                text = (j.result ?? "").trim();
+                chat.id = j.session_id ?? chat.id;
+                if (j.is_error)
+                    askError = text || "Claude returned an error";
+            } catch (e) {}
+        }
+        if (chat && text) {
+            chat.turns = chat.turns.concat([{
+                    q: chat.pending,
+                    a: text
+                }]).slice(-6);
+            chat = Object.assign({}, chat);  // notify bindings
+        }
+        answer = text;
+        answeredAt = Date.now();
+    }
+
+    // Open the agent's own terminal UI on this same conversation.
+    function continueInTerminal() {
+        if (!canContinue)
+            return;
+        const argv = ({
+                claude: ["claude", "--resume", chat.id],
+                codex: ["codex", "resume", "--last"],
+                opencode: ["opencode", "--continue"],
+                gemini: ["gemini", "--resume", "latest"]
+            })[chat.tool];
+        if (argv)
+            run(["terminal", chat.cwd].concat(argv));
     }
 
     function cancelAsk() {
@@ -480,7 +546,7 @@ Singleton {
         id: askProc
 
         stdout: StdioCollector {
-            onStreamFinished: root.answer = text.trim()
+            onStreamFinished: root.gotAnswer(text)
         }
         // stderr is only an error if the tool failed; many print progress there
         stderr: StdioCollector {
@@ -537,6 +603,8 @@ Singleton {
         heard = "";
         voiceError = "";
         voiceHint = "";
+        // talking right after an answer continues that conversation
+        followUp = !!chat && Date.now() - answeredAt < 300000;
         listenProc.command = [status.python || python, voiceScript, "listen", "--model", cfg.voiceModel];
         listenProc.running = true;
         root.listenRequested();
@@ -718,6 +786,7 @@ Singleton {
     signal toggleRequested
     signal askRequested
     signal careRequested
+    signal answerRequested
 
     // One entry point for every remote command, whether it arrives over the
     // socket (the `emba` CLI, any OS) or Quickshell's IPC (keybinds on Linux).
@@ -727,8 +796,21 @@ Singleton {
             root.toggleRequested();
             return "ok";
         case "ask":
-            root.askRequested();
+            // `emba ask` opens the box; `emba ask some question` asks it right away
+            if (args?.length) {
+                root.ask(args.join(" "), []);
+                root.answerRequested();
+            } else
+                root.askRequested();
             return "ok";
+        case "followup":
+            root.followUp = true;
+            root.ask((args ?? []).join(" "), []);
+            root.answerRequested();
+            return "ok";
+        case "continue":
+            root.continueInTerminal();
+            return root.canContinue ? "ok" : "nothing to continue";
         case "settings":
             root.settingsOpen = true;
             root.refreshStatus();

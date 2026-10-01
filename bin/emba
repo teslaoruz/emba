@@ -21,6 +21,7 @@ usage: emba [command]
   look                  drag a rectangle on screen and ask about it
   listen                talk to Emba (voice must be on in settings)
   capture               just take the screenshot and print its path
+  terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
   plugins [new NAME]    list plugins, or start a new one in your config folder
 
@@ -35,6 +36,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -304,6 +306,44 @@ def plugins_cmd(rest):
         print(f"{p['id']:<20} {p.get('name', '?')} ({tag}) — {p.get('error') or p.get('description', '')}")
 
 
+# terminal emulator -> how to make it run a command (the folder comes from cwd=)
+TERMINALS = [
+    ("kitty", []), ("foot", []), ("ghostty", ["-e"]), ("alacritty", ["-e"]), ("wezterm", ["start", "--"]),
+    ("konsole", ["-e"]), ("gnome-terminal", ["--"]), ("xfce4-terminal", ["-x"]), ("tilix", ["-e"]),
+    ("xterm", ["-e"]),
+]
+
+
+def open_terminal(cwd, argv):
+    """Open the user's terminal in `cwd` running `argv`. No shell is involved."""
+    if not Path(cwd).is_dir():
+        cwd = str(Path.home())
+    if SYSTEM == "Darwin":
+        line = f"cd {shlex.quote(cwd)} && " + " ".join(shlex.quote(a) for a in argv)
+        subprocess.Popen(["osascript", "-e", "on run argv", "-e", 'tell application "Terminal" to do script (item 1 of argv)',
+                          "-e", 'tell application "Terminal" to activate', "-e", "end run", line])
+        return
+    if SYSTEM == "Windows":
+        exe = shutil.which(argv[0]) or argv[0]
+        if shutil.which("wt"):
+            subprocess.Popen(["wt", "-d", cwd, exe] + argv[1:])
+        else:
+            subprocess.Popen(["cmd", "/c", "start", "", "/D", cwd, "cmd", "/k", exe] + argv[1:])
+        return
+    chosen = os.environ.get("TERMINAL", "")
+    prefix = None
+    for name, args in TERMINALS:
+        if (chosen and Path(chosen).name == name) or (not chosen and shutil.which(name)):
+            prefix = [chosen or name] + args
+            break
+    if prefix is None and shutil.which("xdg-terminal-exec"):
+        prefix = ["xdg-terminal-exec"]
+    if prefix is None:
+        sys.exit("no terminal found; set $TERMINAL")
+    subprocess.Popen(prefix + argv, cwd=cwd, start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def status():
     return {
         "running": running(),
@@ -367,7 +407,7 @@ def main():
     elif cmd == "run":
         c = host_command()
         sys.exit(subprocess.call(c))
-    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet"):
+    elif cmd in ("settings", "toggle", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue"):
         if not running():
             start()
         reply = ipc(cmd, *rest)
@@ -387,6 +427,8 @@ def main():
             print(f"running: {st['running']}\nautostart: {st['autostart']}\nhost: {st['host']}")
             for a, v in st["agents"].items():
                 print(f"{a}: {'connected' if v['connected'] else 'installed' if v['installed'] else 'not installed'}")
+    elif cmd == "terminal" and len(rest) >= 2:
+        open_terminal(rest[0], rest[1:])
     elif cmd == "plugins":
         plugins_cmd(rest)
     elif cmd == "voice-install":
