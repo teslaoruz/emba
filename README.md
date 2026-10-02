@@ -24,16 +24,22 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
   prompt stays live too; whichever you answer first wins.
 - **See every session at a glance.** What each agent is doing right now, in plain words.
   Click a session to jump to its terminal.
+- **Many agents at once.** Any number of sessions from Claude Code, Codex, Gemini CLI and opencode,
+  side by side; a small badge says which agent each one is.
+- **Keep an eye on usage.** How much of each usage window is left, for every agent that reports it
+  (Claude through its status line, Codex from its own logs). Emba warns you when one runs low.
 - **Know when it's done.** Emba flips, sparkles and shows the last reply.
 - **Ask a quick question.** A small ask box that uses the agent you already have, on your own
   account: no API keys. Pick who answers: Claude, Codex, opencode, Gemini, or a local Ollama model.
-  Follow up in place, or continue the conversation in the agent's own terminal.
+  Follow up in place, or continue the conversation in the agent's own terminal (the terminal you
+  used last, or `$TERMINAL`).
 - **Show it your screen.** Drag a rectangle anywhere and ask about what's in it.
 - **Feed it files.** Drop a file on Emba to ask about it.
 - **Talk to it** (optional). Shake the mouse or say "Hey Emba", ask out loud, hear the answer.
   Speech is recognised and spoken on your computer; nothing is sent anywhere.
 - **It has a life of its own.** Left alone, Emba dances, stretches, hops, sneezes and chases its
   tail; while an agent works it types on a tiny laptop, and it cheers with confetti when work is done.
+  Put on some music and it pops out and dances along (Linux, any MPRIS player).
 - **Look after it.** Emba gets hungry, sleepy and a bit lonely. Rub the cursor over it to pet it,
   double-click to feed it bamboo, click the island to throw it a ball, hold it to tuck it in.
 - **Make it yours.** It follows your desktop's colours (Caelestia, pywal, or your own), sits in
@@ -117,7 +123,8 @@ Everything is in the settings window. Behind it is a plain file,
 | `askWith` | `auto` | `claude` `gemini` `opencode` `codex` `ollama` |
 | `askModel` | | model for the ask box |
 | `focusCommand` | | command to focus a session's terminal; `{window}` `{pid}` `{cwd}` are filled in |
-| `limitWarn` | `80` | warn at this % of a Claude usage limit |
+| `limitWarn` | `80` | warn at this % of any agent's usage window |
+| `danceToMusic` | `true` | pop out and dance while music plays |
 
 `emba set KEY VALUE` changes one from the command line.
 A custom theme is a `~/.config/emba/theme.json` with any of `base surface text dim primary ok warn

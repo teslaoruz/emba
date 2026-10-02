@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Usage for every agent that reports it: Claude (status line) and Codex (its session logs).
+- Every session of every agent in the overview; it scrolls, with an agent badge when mixed.
+- Emba dances while music plays (Linux, MPRIS).
+- Clicking outside the island closes it; clear drawn mic and screen icons that say what they do.
+- Continue in terminal opens the terminal you used last.
+- Fixed: `emba quit` under the autostart service restarted Emba; springs went unstable at low
+  frame rates; the limit plugin event fired on every status line update.
+
 ## 0.1.0
 
 First release.
