@@ -76,7 +76,9 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
         for _ in range(3):
             q.get()
         floor = sorted(rms(q.get()) for _ in range(4))[1]
-        thr = threshold or max(0.005, floor * 2.5)
+        # 1.7x the room: low enough for a quiet, noisy laptop mic (speech there
+        # only just clears the hiss), high enough that the hiss alone never does
+        thr = threshold or max(0.004, floor * 1.7)
         chunks, preroll, started, quiet, loud, t0 = [], [], False, 0.0, 0, time.time()
         while True:
             block = q.get()
@@ -111,6 +113,10 @@ HALLUCINATIONS = {"", "you", "thank you", "thanks", "thank you for watching", "t
 
 
 def transcribe(audio, model):
+    # a quiet mic gives Whisper a whisper: bring the loudest part up to full scale
+    peak = float(abs(audio).max()) if len(audio) else 0.0
+    if 0 < peak < 0.5:
+        audio = audio * (0.9 / peak)
     segs, _ = whisper(model).transcribe(audio, beam_size=1, vad_filter=True)
     text = " ".join(s.text.strip() for s in segs if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0).strip()
     return "" if re.sub(r"[^a-z ]", "", text.lower()).strip() in HALLUCINATIONS else text
@@ -221,8 +227,24 @@ def setup():
     out(state="done")
 
 
+def follow_parent():
+    """Exit when Emba does: a wake listener left behind would hold the microphone forever."""
+    import threading
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(2)
+            if os.getppid() != parent:  # re-parented: Emba is gone
+                os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if os.name != "nt":
+        follow_parent()
     try:
         {"listen": listen, "say": say, "wake": wake, "setup": setup}[cmd]()
     except KeyError:
