@@ -60,10 +60,13 @@ Item {
         hop(1);
         emote("surprised", 0.7);
     }
+    // a file goes in through the slot on top, which then shuts while Emba chews (as coucou's Mochi)
     function gulp() {
-        p.mouthHold = 0.35;
-        p.syVel -= 1.4;
-        emote("happy", 1.2);
+        p.gulpOpen = 0.3;
+        p.chew = 1.1;
+        p.syVel -= 2.2;
+        p.sxVel += 1.8;
+        emote("happy", 1.4);
     }
     function wave() {
         act("wave");
@@ -143,6 +146,11 @@ Item {
         property real wanderLeft: 1
         property point wander: Qt.point(0, 0)
         property real mouthHold: 0
+        // the mailbox slot on top of the head: 0 shut, 1 wide open
+        property real slot: 0
+        property real slotVel: 0
+        property real gulpOpen: 0
+        property real chew: 0
         property string emote: ""
         property real emoteLeft: 0
         property real spinLeft: 0
@@ -391,8 +399,17 @@ Item {
             armL = armR = Math.max(armL, 0.5);
         }
 
+        // the slot springs open while a file hovers, wide for the gulp, shut otherwise
+        p.gulpOpen = Math.max(0, p.gulpOpen - dt);
+        const slotTo = p.gulpOpen > 0 ? 1 : root.eager ? 0.45 : 0;
+        p.slotVel += (380 * (slotTo - p.slot) - 2 * 0.7 * Math.sqrt(380) * p.slotVel) * dt;
+        p.slot = Math.max(0, p.slot + p.slotVel * dt);
+        if (p.chew > 0 && p.gulpOpen <= 0) {
+            p.chew -= dt;
+            mouth = Math.abs(Math.sin(t * 15)) * 0.55;
+        }
         if (root.eager) {
-            mouth = 0.85;
+            mouth = 0.25;
             eyeScale = Math.max(eyeScale, 1.2);
             armL = armR = 0.6 + Math.sin(t * 9) * 0.15;
             spread = 0.3;
@@ -616,7 +633,7 @@ Item {
         const g = root.gaze, moved = g && Math.hypot(g.x - lastGaze.x, g.y - lastGaze.y) > 3;
         if (g)
             lastGaze = g;
-        return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
+        return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || p.slot > 0.01 || p.chew > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
     }
 
     // A plain timer, not FrameAnimation: FrameAnimation keeps Qt's render
@@ -788,6 +805,33 @@ Item {
                 }
             }
             Ell { cx: -8; cy: -18; rx: 20; ry: 5; color: Qt.rgba(1, 1, 1, 0.14) }
+
+            // the mailbox slot: widens first, then opens up
+            Rectangle {
+                readonly property real w: 40 * Math.min(1, p.slot * 2.4)
+                readonly property real h: Math.min(13, 13 * p.slot)
+
+                visible: p.slot > 0.02
+                x: -w / 2
+                y: -21
+                width: w
+                height: h
+                radius: Math.min(w, h) / 2
+                gradient: Gradient {
+                    GradientStop { position: 0; color: "#07080a" }
+                    GradientStop { position: 1; color: "#1a1d26" }
+                }
+
+                // the lip under the opening catches the light
+                Rectangle {
+                    visible: parent.h > 3
+                    x: parent.radius
+                    y: parent.height - 0.6
+                    width: Math.max(0, parent.width - 2 * parent.radius)
+                    height: 0.8
+                    color: Qt.rgba(1, 1, 1, 0.3)
+                }
+            }
 
             // the face moves a little with the gaze
             Item {

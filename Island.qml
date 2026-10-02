@@ -254,12 +254,14 @@ Item {
             // invisible: just a place to hover. A corner, or a strip along the edge
             return (edgeTop || edgeBottom) && (edgeLeft || edgeRight) ? Qt.size(18, 18) : (edgeTop || edgeBottom) ? Qt.size(180, 6) : (edgeLeft || edgeRight) ? Qt.size(6, 140) : Qt.size(46, 10);
         if (mode === "peek")
-            return Qt.size(76, 70);
+            return greeting ? Qt.size(122, 70) : Qt.size(76, 70);
         if (mode === "compact")
             return sideways ? Qt.size(44, 52 + Math.min(sessions.length, 6) * 10 + 4) : Qt.size(Math.min(300, 58 + compactLabel.implicitWidth + 14 + Math.min(sessions.length, 6) * 10 + 8), 44);
         return Qt.size(460, Math.max(132, Math.min(360, (content.item?.implicitHeight ?? 100) + 30)));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
+    // hovering the corner: Emba pops out, waves and says hi (as coucou)
+    readonly property bool greeting: mode === "peek" && App.voiceState === "" && !sideways
 
     // Grow on a soft spring, shrink on a 340 ms curve with no overshoot (as coucou).
     // Which one is decided here, from the sizes themselves: a Behavior reading
@@ -492,7 +494,7 @@ Item {
                     PropertyAction { target: morsel; property: "scale"; value: 1 }
                     ParallelAnimation {
                         NumberAnimation { target: morsel; property: "x"; to: panda.x + panda.width / 2 - 9; duration: 380; easing.type: Easing.InBack }
-                        NumberAnimation { target: morsel; property: "y"; to: panda.y + panda.height * 0.55 - 11; duration: 380; easing.type: Easing.InQuad }
+                        NumberAnimation { target: morsel; property: "y"; to: panda.y + panda.height * 0.31 - 11; duration: 380; easing.type: Easing.InQuad }  // into the slot on its head
                         NumberAnimation { target: morsel; property: "scale"; to: 0.25; duration: 380; easing.type: Easing.InQuad }
                         NumberAnimation { target: morsel; property: "rotation"; from: -20; to: 200; duration: 380 }
                     }
@@ -521,7 +523,7 @@ Item {
                 // A function of the island's size at this very frame, not an animation of
                 // its own: Emba rides along with the shape and can never fall behind it.
                 readonly property real openness: Math.max(0, Math.min(1, (shape.height - 44) / 88))
-                x: (root.mode === "compact" || root.mode === "expanded") && !root.sideways ? 8 + 6 * openness : (shape.width - px) / 2
+                x: (root.mode === "compact" || root.mode === "expanded" || root.greeting) && !root.sideways ? 8 + 6 * openness : (shape.width - px) / 2
                 y: root.mode === "compact" && root.sideways ? 6 : Math.min((shape.height - px) / 2, 5 + 13 * openness + (1 - openness) * (shape.height - px) / 2)
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
@@ -644,6 +646,20 @@ Item {
                     root.petNote = why === "full" ? "is full, maybe later" : "is too tired to play";
                     noteTimer.restart();
                 }
+            }
+
+            // ---- peek: hi! once the island has popped out ----
+            Text {
+                x: 72
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Hi!"
+                color: root.ui.text
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+                opacity: root.greeting && !widthAnim.running ? 1 : 0
+                visible: opacity > 0
+
+                Behavior on opacity { NumberAnimation { duration: 160 } }
             }
 
             // ---- compact: the latest action and a dot per session ----
