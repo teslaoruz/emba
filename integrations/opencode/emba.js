@@ -1,6 +1,8 @@
 // Emba for opencode: tells Emba what each session is doing, and lets Emba
 // answer permission prompts. Installed by `emba connect opencode` into
 // ~/.config/opencode/plugins/. Emba not running -> every call is a quiet no-op.
+// Speaks both plugin APIs from one default export: opencode 1.x calls `server`,
+// opencode 2 reads `id` and `setup`.
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
@@ -56,7 +58,8 @@ function target(tool, args = {}) {
 
 const safe = (s) => String(s ?? "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 120)
 
-export const Emba = async ({ directory }) => {
+// ---- opencode 1.x ----
+const Emba = async ({ directory }) => {
   const base = { agent: "opencode", cwd: directory, pid: process.pid }
   const sid = (id) => `opencode-${safe(id)}`
 
@@ -96,3 +99,61 @@ export const Emba = async ({ directory }) => {
     },
   }
 }
+
+// ---- opencode 2 ----
+// Tool ids look like "functions.shell:2"; the event stream has no tool name of its own.
+const v2tool = (id) => String(id ?? "").replace(/^functions\./, "").replace(/:\d+$/, "")
+
+async function setup(ctx) {
+  const directory = ctx.location?.directory ?? process.cwd()
+  const base = { agent: "opencode", cwd: directory, pid: process.pid }
+  const sid = (id) => `opencode-${safe(id)}`
+  const last = new Map() // session -> its latest reply, sent when the turn ends
+  const controller = new AbortController()
+
+  ;(async () => {
+    for await (const e of ctx.event.subscribe({ signal: controller.signal })) {
+      const d = e.data ?? {}
+      if (e.type === "session.created")
+        send({ ...base, ev: "SessionStart", sid: sid(d.sessionID), cwd: d.location?.directory || directory })
+      else if (e.type === "session.text.ended") last.set(d.sessionID, d.text ?? "")
+      else if (e.type === "session.execution.succeeded" || e.type === "session.execution.failed") {
+        send({ ...base, ev: "Stop", sid: sid(d.sessionID), text: String(last.get(d.sessionID) ?? "").slice(0, 2000) })
+        last.delete(d.sessionID)
+      } else if (e.type === "session.deleted") send({ ...base, ev: "SessionEnd", sid: sid(d.sessionID) })
+    }
+  })().catch(() => {})
+
+  // not awaited: awaiting these in setup stalls opencode 2.0.21
+  void ctx.session.hook("prompt", async (e) => {
+    await send({ ...base, ev: "UserPromptSubmit", sid: sid(e.sessionID), target: String(e.prompt?.text ?? "").replace(/^"(.*)"$/s, "$1").slice(0, 300) })
+  })
+  void ctx.tool.hook("execute.before", async (e) => {
+    if (e.tool === "execute") return // a code-mode wrapper; the real tool follows
+    await send({ ...base, ev: "PreToolUse", sid: sid(e.sessionID), tool: e.tool || v2tool(e.id), target: target(e.tool, e.input) })
+  })
+  // Only questions opencode would ask anyway reach Emba; no answer leaves the terminal prompt.
+  void ctx.permission.hook("evaluate", async (e) => {
+    if (e.effect !== "ask") return
+    const resources = (e.resources ?? []).join(" ")
+    const reply = await send(
+      {
+        ...base,
+        ev: "PermissionRequest",
+        sid: sid(e.sessionID),
+        id: safe(e.source?.id) || `opencode-${Date.now()}`,
+        tool: e.action,
+        full: resources.slice(0, 2000),
+        always: false,
+      },
+      true,
+    )
+    if (reply?.behavior === "allow" || reply?.behavior === "deny") {
+      e.effect = reply.behavior
+      if (reply.behavior === "deny") e.message = "Denied from Emba."
+    }
+  })
+  return () => controller.abort()
+}
+
+export default { id: "emba", setup, server: Emba }
