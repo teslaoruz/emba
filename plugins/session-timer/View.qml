@@ -7,7 +7,8 @@ Text {
     property var theme
     property int tick
 
-    readonly property var running: (app?.sessions ?? []).filter(s => s.started)
+    // under a minute says nothing worth a line
+    readonly property var running: (tick, (app?.sessions ?? []).filter(s => s.started && Date.now() - s.started >= 60000))
 
     function ago(ms) {
         const m = Math.floor(ms / 60000);
@@ -21,7 +22,7 @@ Text {
     elide: Text.ElideRight
 
     Timer {
-        running: parent.visible
+        running: (parent.app?.sessions ?? []).length > 0
         interval: 30000
         repeat: true
         onTriggered: parent.tick++

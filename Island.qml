@@ -1213,6 +1213,9 @@ Item {
                     required property string modelData
 
                     Layout.fillWidth: true
+                    // a panel that hides itself takes no room
+                    Layout.preferredHeight: item?.visible ? item.implicitHeight : -1
+                    Layout.maximumHeight: item?.visible ? Infinity : 0
                     source: modelData
                     onLoaded: {
                         item.app = App;
