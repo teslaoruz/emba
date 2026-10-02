@@ -434,12 +434,14 @@ Item {
                     panda.emote("", 0);
                 }
                 onDropped: drop => {
+                    // stay open through the swallow: no snapping back to the pill in between
+                    root.expandAuto("drop");
                     root.dragging = false;
                     panda.emote("", 0);
                     // file:///home/x -> /home/x, file:///C:/x -> C:/x
                     const paths = drop.urls.map(u => decodeURIComponent(String(u).replace(/^file:\/\/(\/[A-Za-z]:)/, "$1").replace(/^\/([A-Za-z]:)/, "$1").replace(/^file:\/\//, ""))).filter(p => p.startsWith("/") || /^[A-Za-z]:/.test(p));
                     if (!paths.length)
-                        return;
+                        return root.collapse();
                     root.files = paths;
                     swallow.from = Qt.point(drop.x, drop.y);
                     swallow.restart();
