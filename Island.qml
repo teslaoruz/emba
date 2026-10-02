@@ -73,7 +73,7 @@ Item {
     // tucks away into its corner until the mouse comes looking.
     readonly property bool busy: pending.length > 0 || sessions.some(s => ["working", "thinking", "waiting", "done"].includes(s.state))
     readonly property bool dancing: !!App.music && App.cfg.danceToMusic !== false
-    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dragging || dancing || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
+    readonly property string mode: open || dragging ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dancing || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -147,8 +147,14 @@ Item {
             root.open ? root.collapse() : root.expand();
         }
         function onSnapshotRequested(path) {
-            if (path)
-                root.grabToImage(r => r.saveToFile(path));
+            if (!path)
+                return;
+            if (!path.includes("%d"))
+                return root.grabToImage(r => r.saveToFile(path));
+            // "frames/%d.png": a second of frames, to check animations
+            recorder.path = path;
+            recorder.frame = 0;
+            recorder.restart();
         }
         function onAnswerRequested() {
             root.expand("result");
@@ -255,6 +261,43 @@ Item {
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
 
+    // Grow on a soft spring, shrink on a 340 ms curve with no overshoot (as coucou).
+    // Which one is decided here, from the sizes themselves: a Behavior reading
+    // `opening` could start before that binding updated and bounce on the way in.
+    function tween(anim, to) {
+        const grow = to > anim.target[anim.property];
+        anim.stop();
+        anim.to = to;
+        anim.duration = grow ? 520 : 340;
+        anim.easing.type = grow ? Easing.OutBack : Easing.BezierSpline;
+        anim.easing.overshoot = 0.9;
+        anim.easing.bezierCurve = [0.45, 0, 0.2, 1, 1, 1];
+        anim.start();
+    }
+    onTargetChanged: {
+        tween(widthAnim, target.width);
+        tween(heightAnim, target.height);
+    }
+    NumberAnimation { id: widthAnim; target: shape; property: "width" }
+    NumberAnimation { id: heightAnim; target: shape; property: "height" }
+    NumberAnimation { id: goalAnim; target: panda; property: "goal" }
+
+    Timer {
+        id: recorder
+
+        property string path
+        property int frame
+
+        interval: 33
+        repeat: true
+        onTriggered: {
+            const n = frame++;
+            root.grabToImage(r => r.saveToFile(path.replace("%d", String(n).padStart(2, "0"))));
+            if (frame >= 30)
+                stop();
+        }
+    }
+
     Item {
         id: stage
 
@@ -276,16 +319,15 @@ Item {
             atBottom: root.edgeBottom
             atLeft: root.edgeLeft
             atRight: root.edgeRight
-            radius: root.mode === "expanded" ? 30 : Math.min(shape.height / 2, 22)
-            ear: root.mode === "hidden" ? 0 : Math.min(16, shape.height / 3)
+            radius: Math.min(shape.height / 2, 22 + 8 * Math.max(0, Math.min(1, (shape.height - 44) / 88)))
+            ear: Math.min(16, shape.height / 3)
             fill: root.ui.bg
             // a glow along the outline while something waits on you
             stroke: root.pending.length && root.mode !== "expanded" ? Qt.alpha(root.ui.accent, pulse.value) : "transparent"
             strokeWidth: root.pending.length && root.mode !== "expanded" ? 2 : 1
             opacity: root.mode === "hidden" ? 0 : 1
 
-            Behavior on radius { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
-            Behavior on ear { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+            // the corners follow the shape's size, so they never lag behind it
             Behavior on opacity { NumberAnimation { duration: 180 } }
 
             QtObject {
@@ -307,14 +349,14 @@ Item {
         FocusScope {
             id: shape
 
-            width: root.target.width
-            height: root.target.height
             x: (stage.width - width) * root.hAlign
             y: (stage.height - height) * root.vAlign
             clip: true
 
-            Behavior on width { NumberAnimation { duration: root.opening ? 560 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.05 } }
-            Behavior on height { NumberAnimation { duration: root.opening ? 560 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic; easing.overshoot: 1.05 } }
+            Component.onCompleted: {
+                width = root.target.width;
+                height = root.target.height;
+            }
 
             HoverHandler {
                 id: hover
@@ -465,13 +507,20 @@ Item {
             Panda {
                 id: panda
 
-                // sized so the whole drawing (ears, paws, tail, hops) fits each shape
-                property real px: root.mode === "expanded" ? 72 : root.mode === "peek" ? 56 : root.mode === "compact" ? 34 : 20
+                // sized so the whole drawing (ears, paws, tail, hops) fits each shape;
+                // never taller than the island is right now, so it can't poke out mid-animation
+                readonly property real goalFor: root.dragging ? 80 : root.mode === "expanded" ? 72 : root.mode === "peek" ? 56 : root.mode === "compact" ? 34 : 20
+                property real goal: 20
+                onGoalForChanged: root.tween(goalAnim, goalFor)
+                readonly property real px: Math.max(0, Math.min(goal, shape.height - 8, shape.width - 8))
 
                 width: px
                 height: px
-                x: root.mode === "expanded" ? 14 : root.mode === "compact" && !root.sideways ? 8 : (shape.width - px) / 2
-                y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : root.mode === "compact" && root.sideways ? 6 : (shape.height - px) / 2
+                // A function of the island's size at this very frame, not an animation of
+                // its own: Emba rides along with the shape and can never fall behind it.
+                readonly property real openness: Math.max(0, Math.min(1, (shape.height - 44) / 88))
+                x: (root.mode === "compact" || root.mode === "expanded") && !root.sideways ? 8 + 6 * openness : (shape.width - px) / 2
+                y: root.mode === "compact" && root.sideways ? 6 : Math.min((shape.height - px) / 2, 5 + 13 * openness + (1 - openness) * (shape.height - px) / 2)
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
                 mood: root.mood
@@ -481,9 +530,6 @@ Item {
                 music: root.dancing
                 bodyColor: App.cfg.color
 
-                Behavior on px { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
-                Behavior on x { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
-                Behavior on y { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
                 gaze: dropZone.containsDrag ? Qt.point(dropZone.drag.x - x - width / 2, dropZone.drag.y - y - height / 2) : toy.visible ? Qt.point(toy.x + toy.width / 2 - x - width / 2, toy.y + toy.height / 2 - y - height / 2) : hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
@@ -600,13 +646,16 @@ Item {
 
             // ---- compact: the latest action and a dot per session ----
             Row {
+                id: compactRow
+
                 anchors.verticalCenter: parent.verticalCenter
                 x: 50
                 spacing: 8
-                opacity: root.mode === "compact" && !root.sideways ? 1 : 0
+                // back only once the pill has finished shrinking; gone at once when it grows
+                opacity: root.mode === "compact" && !root.sideways && !heightAnim.running && !widthAnim.running ? 1 : 0
                 visible: opacity > 0
 
-                Behavior on opacity { NumberAnimation { duration: root.mode === "compact" ? 260 : 120 } }
+                Behavior on opacity { NumberAnimation { duration: compactRow.opacity < 0.5 ? 200 : 0 } }
 
                 Text {
                     id: compactLabel
@@ -671,7 +720,8 @@ Item {
                 y: 18
                 width: shape.width - 98 - 22
                 active: root.mode === "expanded"
-                opacity: root.mode === "expanded" ? 1 : 0
+                // in once the island is nearly open (never squeezed into a small one), out at once
+                opacity: root.mode === "expanded" && shape.height >= Math.min(root.target.height, 132) * 0.85 ? 1 : 0
                 sourceComponent: ({
                         overview: overviewView,
                         empty: emptyView,
@@ -686,12 +736,7 @@ Item {
                         care: careView
                     })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
 
-                Behavior on opacity {
-                    SequentialAnimation {
-                        PauseAnimation { duration: root.mode === "expanded" ? 160 : 0 }
-                        NumberAnimation { duration: root.mode === "expanded" ? 300 : 120 }
-                    }
-                }
+                Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 0 } }
             }
 
             Keys.onPressed: event => {
@@ -1651,17 +1696,28 @@ ToolIcon {
     Component {
         id: dropView
 
+        // the whole card is the target; Emba leans in, mouth open
         Rectangle {
             implicitHeight: 96
-            radius: 16
-            color: Qt.alpha(root.ui.dim, 0.08)
-            border.width: 1.5
-            border.color: root.ui.dim
+            radius: 18
+            color: Qt.alpha(root.ui.accent, 0.12)
+            border.width: 2
+            border.color: root.ui.accent
 
-            Label {
+            Column {
                 anchors.centerIn: parent
-                text: "Feed it to Emba"
-                color: root.ui.dim
+                spacing: 2
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Drop it here"
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
+                Dim {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Emba will ask about it"
+                }
             }
         }
     }
