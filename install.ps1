@@ -66,4 +66,16 @@ Say "Connecting to your coding agents (you'll see each change first)"
 $answer = Read-Host "Start Emba when you log in? [Y/n]"
 if ($answer -notmatch "^[nN]") { & "$App\emba.cmd" autostart on }
 & "$App\emba.cmd" start
+
+# ---- voice (optional) ----
+$voice = $env:EMBA_VOICE
+if (-not $voice) { $voice = Read-Host "Talk to Emba and hear it answer? Free local speech models, about 250 MB, nothing leaves this computer. [y/N]" }
+if ($voice -match "^[yY]") {
+    Say "Setting up voice (a few minutes)"
+    & "$App\emba.cmd" voice-install
+    if ($LASTEXITCODE -eq 0) {
+        $back = Read-Host "Should Emba read its answers aloud? [Y/n]"
+        if ($back -match "^[nN]") { & "$App\emba.cmd" set voiceReply false | Out-Null }
+    } else { Say "Voice didn't install; try again later with: emba voice-install" }
+} else { Say "No voice for now. Settings has an Install button if you change your mind." }
 Say "Done. Emba is in the corner of your screen. Try: emba settings"

@@ -4,6 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/teslaoruz/emba/main/install.sh | sh
 #   ./install.sh               (from a checkout)
 #   ./install.sh --uninstall
+#   EMBA_VOICE=yes|no ./install.sh    answer the voice question up front
 #
 # What it does: puts Emba in ~/.local/share/emba (or uses this checkout),
 # adds an `emba` command to ~/.local/bin, a menu entry on Linux, and then asks
@@ -103,4 +104,24 @@ if (exec < /dev/tty) 2> /dev/null; then
     case "$answer" in [nN]*) ;; *) "$LAUNCHER" autostart on ;; esac
 fi
 "$LAUNCHER" start
+
+# ---------------------------------------------------------------- voice (optional)
+voice=${EMBA_VOICE:-}
+if [ -z "$voice" ] && (exec < /dev/tty) 2> /dev/null; then
+    printf 'Talk to Emba and hear it answer? Free local speech models, about 250 MB,\nnothing you say leaves this computer. [y/N] '
+    read -r voice < /dev/tty || voice=n
+fi
+case "$voice" in
+[yY]*)
+    say "Setting up voice (a few minutes)"
+    if "$LAUNCHER" voice-install; then
+        printf 'Should Emba read its answers aloud? [Y/n] '
+        read -r back < /dev/tty 2> /dev/null || back=y
+        case "$back" in [nN]*) "$LAUNCHER" set voiceReply false > /dev/null ;; esac
+    else
+        say "Voice didn't install; try again later with: emba voice-install"
+    fi
+    ;;
+*) say "No voice for now. Settings has an Install button if you change your mind." ;;
+esac
 say "Done. Emba is in the corner of your screen. Try: emba settings"
