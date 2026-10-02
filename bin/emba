@@ -116,7 +116,7 @@ def start():
     if running():
         print("Emba is already running")
         return
-    if autostart_state() and SYSTEM == "Linux" and shutil.which("systemctl"):
+    if not os.environ.get("EMBA_SOCKET") and autostart_state() and SYSTEM == "Linux" and shutil.which("systemctl"):
         subprocess.run(["systemctl", "--user", "start", "emba.service"])
     else:
         kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}

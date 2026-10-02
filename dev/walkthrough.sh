@@ -1,7 +1,8 @@
 #!/bin/sh
 # Use Emba like a person would, with the real mouse and keyboard, and keep a
 # screenshot of every step in dev/walk/. Runs a separate Emba on its own socket.
-#   sh dev/walkthrough.sh
+#   sh dev/walkthrough.sh DECOY_ADDRESS
+# Keystrokes only go out while DECOY (a terminal running `cat`) has focus.
 cd "$(dirname "$0")/.."
 read -r W H X Y << EOF
 $(hyprctl monitors -j | jq -r '.[] | select(.focused) | "\(.width) \(.height) \(.x) \(.y)"')
@@ -10,24 +11,27 @@ R=$((X + W))                                   # right edge of the screen
 geo="$((R - 500)),$Y 500x260"
 out=dev/walk
 rm -rf $out && mkdir -p $out
-to() { hyprctl dispatch "hl.dsp.cursor.move({x=$1,y=$2})" > /dev/null 2>&1 || hyprctl dispatch movecursor "$1" "$2" > /dev/null; }
+to() { hyprctl dispatch "hl.dsp.cursor.move({x=$1,y=$2})" > /dev/null 2>&1 || hyprctl dispatch movecursor "$1" "$2" > /dev/null; ydotool mousemove -x 1 -y 0 > /dev/null; ydotool mousemove -x -1 -y 0 > /dev/null; }
 click() { ydotool click 0xC0 > /dev/null; }
 shot() { sleep "${2:-0.9}"; grim -g "$geo" "$out/$1.png"; }
 fake() { python3 dev/fake.py "$@"; }
+decoy=${1:?usage: walkthrough.sh DECOY_ADDRESS}
+guard() { [ "$(hyprctl activewindow -j | jq -r .address)" = "$decoy" ] || { echo "ABORT: focus moved off the decoy"; exit 1; }; }
 
 python3 bin/emba quit > /dev/null; sleep 0.6
 export EMBA_SOCKET="$XDG_RUNTIME_DIR/emba-walk.sock"
 emba() { python3 bin/emba "$@" > /dev/null; }
 to $((R - 700)) $((Y + 500))
 emba start; sleep 1.5
+python3 bin/emba focus "$decoy" > /dev/null; sleep 0.4; guard
 shot 01-hidden
 
 to $((R - 3)) $((Y + 3));               shot 02-peek 0.35
                                         shot 03-welcome 1.4
-to $((R - 300)) $((Y + 80))             # over the ask field
+to $((R - 300)) $((Y + 68))             # over the ask field
 click;                                  shot 04-ask-open 0.8
-wtype "hello there";                    shot 05-ask-typing 0.4
-wtype -k Escape;                        shot 06-after-esc 0.8
+guard; wtype "hello there";                    shot 05-ask-typing 0.4
+guard; wtype -k Escape;                        shot 06-after-esc 0.8
 
 to $((R - 700)) $((Y + 500)); sleep 1.5
 fake start;                             shot 07-compact 1.5
@@ -36,8 +40,8 @@ to $((R - 300)) $((Y + 75));            shot 09-row-hover 0.6
 
 fake ask > /dev/null &
                                         shot 10-approval 1.6
-to $((R - 280)) $((Y + 117));           shot 11-hover-always 0.6
-to $((R - 200)) $((Y + 117)); click;    shot 12-after-allow 0.9
+to $((R - 240)) $((Y + 91));            shot 11-hover-always 0.6
+to $((R - 160)) $((Y + 91)); click;     shot 12-after-allow 0.9
 wait
 
 fake done;                              shot 13-finished 1.4
@@ -57,5 +61,5 @@ to $((R - 800)) $((Y + 600));           shot 20-left 2.5
 fake end
 emba quit
 unset EMBA_SOCKET
-python3 bin/emba start > /dev/null
+sh dev/run.sh > /dev/null
 ls $out
