@@ -1,4 +1,5 @@
-"""Clicking the overview's "Ask…" field opens the ask box (offscreen, no desktop input).
+"""Clicking the overview's "Ask…" field opens the ask box, and the back button
+returns to the overview (offscreen, no desktop input).
     QT_QPA_PLATFORM=offscreen python tests/ui_click.py"""
 import os
 import sys
@@ -53,8 +54,28 @@ def step2():
         c = field.mapToScene(QPointF(field.width() / 2, field.height() / 2))
         print("clicking at", round(c.x()), round(c.y()))
         click(c.x(), c.y())
-    QTimer.singleShot(700, lambda: (print("view after:", island.property("view")), app.quit()))
+    QTimer.singleShot(900, step3)
+
+
+def step3():
+    print("view after:", island.property("view"))
+    results.append(island.property("view") == "ask")
+    back = win.findChild(QQuickItem, "cornerButton")
+    if back:
+        c = back.mapToScene(QPointF(back.width() / 2, back.height() / 2))
+        click(c.x(), c.y())
+    QTimer.singleShot(900, step4)
+
+
+def step4():
+    print("after back:", island.property("view"))
+    results.append(island.property("view") == "overview")
+    app.quit()
+
+
+results = []
 
 
 QTimer.singleShot(1500, step1)
 app.exec()
+sys.exit(0 if results == [True, True] else 1)

@@ -5,6 +5,7 @@
     python3 dev/fake.py done           first session finishes
     python3 dev/fake.py limit 85       usage at 85 %
     python3 dev/fake.py many           six sessions across four agents
+    python3 dev/fake.py finish         the six finish (idle again ~20 s later)
     python3 dev/fake.py end            all sessions end
 """
 import json
@@ -50,6 +51,9 @@ elif cmd == "many":
         m = {"sid": f"fake-m{i}", "agent": agent, "cwd": f"/home/you/code/{cwd}", "pid": 1}
         send({**m, "ev": "SessionStart"})
         send({**m, "ev": "PreToolUse", "tool": "Edit", "target": work})
+elif cmd == "finish":
+    for i in range(6):
+        send({"sid": f"fake-m{i}", "ev": "Stop", "text": "Done."})
 elif cmd == "end":
     for sid in ["fake-a", "fake-b"] + [f"fake-m{i}" for i in range(6)]:
         send({"sid": sid, "ev": "SessionEnd"})

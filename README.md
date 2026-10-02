@@ -101,7 +101,8 @@ free tier, opencode's free models, or a model running on your own machine with O
 | Ask | click "Ask…", or `emba ask "your question"` |
 | Ask about the screen | the frame icon in the ask box, or `emba look` |
 | Talk | shake the mouse, say "Hey Emba", or `emba listen` |
-| Settings | right-click the island, or `emba settings` |
+| Settings | the gear on the island, right-click it, or `emba settings` |
+| Back | the arrow in the corner returns to the sessions from any other view |
 | Look after Emba | rub the cursor over it to pet, double-click to feed, click to throw a ball, hold to tuck in |
 
 Voice commands for Emba itself: *"eat"*, *"play"*, *"go to sleep"*, *"wake up"*,

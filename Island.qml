@@ -65,7 +65,27 @@ Item {
         readonly property color accentInk: "#ffffff"
         readonly property color error: "#ff453a"
     }
-    readonly property bool mixedAgents: new Set(sessions.map(x => x.agent ?? "claude")).size > 1
+    // where a session lives, without its own name: /home/me/code/invoices -> ~/code
+    readonly property string home: Quickshell.env("HOME") ?? ""
+    function where(cwd) {
+        const parts = String(cwd ?? "").split(/[\\/]/);
+        parts.pop();
+        const dir = parts.join("/");
+        return home && dir.startsWith(home) ? "~" + dir.slice(home.length) : dir;
+    }
+    // how long a session has been going: 4m, 2h 32m
+    property real now: Date.now()
+    Timer {
+        running: root.open
+        interval: 30000
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.now = Date.now()
+    }
+    function age(started) {
+        const m = Math.max(0, Math.floor((now - started) / 60000));
+        return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+    }
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
 
@@ -73,7 +93,7 @@ Item {
     // tucks away into its corner until the mouse comes looking.
     readonly property bool busy: pending.length > 0 || sessions.some(s => ["working", "thinking", "waiting", "done"].includes(s.state))
     readonly property bool dancing: !!App.music && App.cfg.danceToMusic !== false
-    readonly property string mode: open || dragging ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dancing || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
+    readonly property string mode: open || dragging ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dancing || !App.cfg.hideWhenIdle) ? "compact" : sessions.length ? "dots" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -253,6 +273,9 @@ Item {
         if (mode === "hidden")
             // invisible: just a place to hover. A corner, or a strip along the edge
             return (edgeTop || edgeBottom) && (edgeLeft || edgeRight) ? Qt.size(18, 18) : (edgeTop || edgeBottom) ? Qt.size(180, 6) : (edgeLeft || edgeRight) ? Qt.size(6, 140) : Qt.size(46, 10);
+        if (mode === "dots")
+            // just the sessions, very small, flush in the corner
+            return sideways ? Qt.size(20, 12 + Math.min(sessions.length, 6) * 10) : Qt.size(12 + Math.min(sessions.length, 6) * 10, 20);
         if (mode === "peek")
             return greeting ? Qt.size(122, 70) : Qt.size(76, 70);
         if (mode === "compact")
@@ -260,6 +283,28 @@ Item {
         return Qt.size(460, Math.max(132, Math.min(360, (content.item?.implicitHeight ?? 100) + 30)));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
+
+    // A breath for the dots of busy sessions, stepped at 8 fps by a timer: an
+    // endless QML animation would keep the whole island redrawing at full rate.
+    property real beat: 0
+    Timer {
+        running: root.sessions.some(x => ["working", "thinking", "waiting"].includes(x.state)) && (root.mode === "compact" || root.mode === "dots")
+        interval: 125
+        repeat: true
+        onTriggered: root.beat = (root.beat + 0.125) % 1.2
+        onRunningChanged: root.beat = 0
+    }
+    component SessionDot: Rectangle {
+        required property var modelData
+        readonly property bool active: ["working", "thinking", "waiting"].includes(modelData.state)
+
+        width: 6
+        height: 6
+        radius: 3
+        color: modelData.state === "waiting" ? root.ui.accent : App.agentColour(modelData.agent)
+        opacity: active ? 0.55 + 0.45 * Math.sin(root.beat / 1.2 * 2 * Math.PI) ** 2 : 0.6
+        scale: active ? 1 + 0.35 * Math.sin(root.beat / 1.2 * 2 * Math.PI) ** 2 : 1
+    }
     // hovering the corner: Emba pops out, waves and says hi (as coucou)
     readonly property bool greeting: mode === "peek" && App.voiceState === "" && !sideways
 
@@ -368,7 +413,7 @@ Item {
                         leaveTimer.stop();
                         unpeek.stop();
                         autoClose.stop();
-                        if (root.mode === "hidden") {
+                        if (root.mode === "hidden" || root.mode === "dots") {
                             root.peeking = true;
                             panda.wave();
                             openTimer.interval = 650;
@@ -525,8 +570,8 @@ Item {
                 readonly property real openness: Math.max(0, Math.min(1, (shape.height - 44) / 88))
                 x: (root.mode === "compact" || root.mode === "expanded" || root.greeting) && !root.sideways ? 8 + 6 * openness : (shape.width - px) / 2
                 y: root.mode === "compact" && root.sideways ? 6 : Math.min((shape.height - px) / 2, 5 + 13 * openness + (1 - openness) * (shape.height - px) / 2)
-                opacity: root.mode === "hidden" ? 0 : 1
-                running: root.mode !== "hidden"
+                opacity: root.mode === "hidden" || root.mode === "dots" ? 0 : 1
+                running: root.mode !== "hidden" && root.mode !== "dots"
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
                 fps: root.mode === "expanded" ? 24 : root.dancing && !root.busy ? 8 : 12
@@ -694,14 +739,7 @@ Item {
                     Repeater {
                         model: root.sessions.slice(0, 6)
 
-                        Rectangle {
-                            required property var modelData
-
-                            width: 6
-                            height: 6
-                            radius: 3
-                            color: modelData.state === "waiting" ? root.ui.accent : ["working", "thinking"].includes(modelData.state) ? root.ui.text : root.ui.faint
-                        }
+                        SessionDot {}
                     }
                 }
             }
@@ -719,14 +757,25 @@ Item {
                 Repeater {
                     model: root.sessions.slice(0, 6)
 
-                    Rectangle {
-                        required property var modelData
+                    SessionDot {}
+                }
+            }
 
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: modelData.state === "waiting" ? root.ui.accent : ["working", "thinking"].includes(modelData.state) ? root.ui.text : root.ui.faint
-                    }
+            // ---- dots: nothing busy, the sessions still there, very small ----
+            Grid {
+                anchors.centerIn: parent
+                flow: root.sideways ? Grid.TopToBottom : Grid.LeftToRight
+                rows: root.sideways ? 6 : 1
+                spacing: 4
+                opacity: root.mode === "dots" && !widthAnim.running ? 1 : 0
+                visible: opacity > 0
+
+                Behavior on opacity { NumberAnimation { duration: 160 } }
+
+                Repeater {
+                    model: root.sessions.slice(0, 6)
+
+                    SessionDot {}
                 }
             }
 
@@ -736,7 +785,7 @@ Item {
 
                 x: 98
                 y: 18
-                width: shape.width - 98 - 22
+                width: shape.width - 98 - (cornerButton.visible ? 52 : 22)
                 active: root.mode === "expanded"
                 // in once the island is nearly open (never squeezed into a small one), out at once
                 opacity: root.mode === "expanded" && shape.height >= Math.min(root.target.height, 132) * 0.85 ? 1 : 0
@@ -755,6 +804,35 @@ Item {
                     })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
 
                 Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 0 } }
+            }
+
+            // settings on the main screens; a way back to them from everywhere else
+            IconButton {
+                id: cornerButton
+
+                objectName: "cornerButton"
+
+                readonly property bool home: ["overview", "empty"].includes(root.view)
+
+                visible: root.mode === "expanded" && !["approval", "drop"].includes(root.view)
+                opacity: content.opacity
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: 14
+                anchors.topMargin: 14
+                kind: home ? "gear" : "back"
+                onClicked: {
+                    if (home) {
+                        App.settingsOpen = true;
+                        return App.refreshStatus();
+                    }
+                    if (App.asking)
+                        App.cancelAsk();
+                    App.followUp = false;
+                    root.files = [];
+                    root.draft = "";
+                    root.expand();
+                }
             }
 
             Keys.onPressed: event => {
@@ -959,6 +1037,73 @@ Item {
         color: root.ui.dim
         font.pixelSize: 13
         elide: Text.ElideRight
+    }
+
+    // a round, drawn icon button: "gear" (settings) or "back"
+    component IconButton: Rectangle {
+        id: ib
+
+        property string kind
+        readonly property color ink: ibh.hovered ? root.ui.text : root.ui.dim
+        signal clicked
+
+        width: 30
+        height: 30
+        radius: 15
+        color: ibh.hovered ? root.ui.fillHover : root.ui.fill
+        scale: ibt.pressed ? 0.9 : 1
+
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on scale { NumberAnimation { duration: 90 } }
+
+        // back: a chevron pointing left
+        Item {
+            visible: ib.kind === "back"
+            anchors.fill: parent
+
+            Rectangle { x: 11.5; y: 11.3; width: 8; height: 2; radius: 1; color: ib.ink; rotation: -45; transformOrigin: Item.Left }
+            Rectangle { x: 11.5; y: 16.7; width: 8; height: 2; radius: 1; color: ib.ink; rotation: 45; transformOrigin: Item.Left; anchors.verticalCenterOffset: 0 }
+        }
+
+        // gear: eight teeth around a ring
+        Item {
+            visible: ib.kind === "gear"
+            anchors.centerIn: parent
+            width: 16
+            height: 16
+
+            Repeater {
+                model: 4
+
+                Rectangle {
+                    required property int index
+                    anchors.centerIn: parent
+                    width: 15
+                    height: 3
+                    radius: 1
+                    rotation: index * 45
+                    color: ib.ink
+                }
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 11
+                height: 11
+                radius: 5.5
+                color: ib.ink
+            }
+            // the hole: the button's colour made opaque (it sits on the black island)
+            Rectangle {
+                anchors.centerIn: parent
+                width: 5
+                height: 5
+                radius: 2.5
+                color: ibh.hovered ? "#292929" : "#1a1a1a"
+            }
+        }
+
+        HoverHandler { id: ibh; cursorShape: Qt.PointingHandCursor }
+        TapHandler { id: ibt; onTapped: ib.clicked() }
     }
 
     // a round, drawn icon: "mic" (talk) or "area" (point at the screen)
@@ -1197,18 +1342,55 @@ Item {
                     HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: App.focus(srow.modelData.sid) }
 
+                    // a strip in the agent's colour says whose session this is
+                    Rectangle {
+                        x: 0
+                        y: 10
+                        width: 3
+                        height: parent.height - 20
+                        radius: 1.5
+                        color: App.agentColour(srow.modelData.agent)
+                    }
+
                     Column {
                         x: 14
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - (root.mixedAgents ? 90 : 28)
+                        width: parent.width - 28
 
-                        Text {
+                        // project, then where it lives; agent and how long on the right
+                        RowLayout {
                             width: parent.width
-                            text: srow.modelData.name
-                            color: root.ui.text
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
+                            spacing: 6
+
+                            Text {
+                                text: srow.modelData.name
+                                color: root.ui.text
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                                // the name keeps its room; the path gives way first
+                                Layout.preferredWidth: implicitWidth
+                                Layout.minimumWidth: Math.min(implicitWidth, 90)
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.where(srow.modelData.cwd)
+                                color: root.ui.faint
+                                font.pixelSize: 12
+                                elide: Text.ElideLeft
+                            }
+                            Text {
+                                text: srow.modelData.agent ?? "claude"
+                                color: App.agentColour(srow.modelData.agent)
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                visible: !!srow.modelData.started
+                                text: root.age(srow.modelData.started)
+                                color: root.ui.faint
+                                font.pixelSize: 11
+                            }
                         }
                         Text {
                             width: parent.width
@@ -1216,27 +1398,6 @@ Item {
                             color: srow.modelData.state === "waiting" ? root.ui.accent : root.ui.dim
                             font.pixelSize: 12
                             elide: Text.ElideRight
-                        }
-                    }
-
-                    // which agent: shown once more than one kind is running
-                    Rectangle {
-                        visible: root.mixedAgents
-                        anchors.right: parent.right
-                        anchors.rightMargin: 8
-                        y: 7
-                        width: badge.implicitWidth + 12
-                        height: 16
-                        radius: 8
-                        color: Qt.alpha(root.ui.text, 0.08)
-
-                        Text {
-                            id: badge
-
-                            anchors.centerIn: parent
-                            text: srow.modelData.agent ?? "claude"
-                            color: root.ui.dim
-                            font.pixelSize: 10
                         }
                     }
                 }

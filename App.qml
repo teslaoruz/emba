@@ -146,6 +146,17 @@ Singleton {
     signal permissionAsked
     signal limitWarning(string window, int percent)
 
+    // one colour per agent, so their sessions are told apart at a glance
+    readonly property var agentColours: ({
+            claude: "#e07a52",
+            codex: "#3ecf8e",
+            gemini: "#5b9cf6",
+            opencode: "#c084fc"
+        })
+    function agentColour(agent) {
+        return agentColours[agent ?? "claude"] ?? "#9ca3af";
+    }
+
     readonly property var stateColours: ({
             idle: Theme.dim,
             thinking: Theme.thinking,
