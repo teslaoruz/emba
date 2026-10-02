@@ -137,15 +137,38 @@ Item {
         files = [];
     }
 
+    // ---- sound effects (Settings: Sounds) ----
+    Loader {
+        id: sounds
+
+        source: "Sounds.qml"  // no audio module on this system: it stays unloaded, Emba stays quiet
+    }
+    function sfx(name) {
+        if (App.cfg.sounds !== false && sounds.item)
+            sounds.item.play(name, App.cfg.soundVolume ?? 0.5);
+    }
+    property string lastMode: "hidden"
+    onModeChanged: {
+        if (mode === "expanded" && lastMode !== "expanded" && !["approval", "finished", "limit"].includes(view))
+            sfx("open");
+        else if (lastMode === "expanded" && mode !== "expanded")
+            sfx("close");
+        else if (mode === "peek" && greeting)
+            sfx("hi");
+        lastMode = mode;
+    }
+
     Connections {
         target: App
 
         function onPermissionAsked() {
+            root.sfx("ask");
             panda.surprise();
             if (App.cfg.autoOpenOnPermission)
                 root.expandAuto(root.forcedView === "ask" ? "ask" : "");
         }
         function onFinished(sid) {
+            root.sfx("done");
             if (!App.cfg.celebrate || (root.open && root.view !== "overview"))
                 return;
             root.finishedSid = sid;
@@ -154,6 +177,7 @@ Item {
                 autoClose.restart();
         }
         function onLimitWarning(window, percent) {
+            root.sfx("low");
             panda.emote("surprised", 1);
             if (!root.open || root.view === "overview") {
                 root.expandAuto("limit");
@@ -283,15 +307,19 @@ Item {
         return Qt.size(460, Math.max(132, Math.min(360, (content.item?.implicitHeight ?? 100) + 30)));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
+    // How much window the island needs right now (unscaled): all of it while
+    // it changes size, just its own shape plus room for the flared corners
+    // once it has settled. A smaller window is a smaller picture to redraw
+    // every frame, which is most of what animating costs.
+    readonly property size needs: widthAnim.running || heightAnim.running || dragging ? Qt.size(480, 380) : Qt.size(Math.min(480, target.width + 40), Math.min(380, target.height + 40))
 
-    // A breath for the dots of busy sessions, stepped at 8 fps by a timer: an
-    // endless QML animation would keep the whole island redrawing at full rate.
+    // A breath for the dots of busy sessions, at the pill's 30 fps.
     property real beat: 0
     Timer {
         running: root.sessions.some(x => ["working", "thinking", "waiting"].includes(x.state)) && (root.mode === "compact" || root.mode === "dots")
-        interval: 125
+        interval: 33
         repeat: true
-        onTriggered: root.beat = (root.beat + 0.125) % 1.2
+        onTriggered: root.beat = (root.beat + 0.033) % 1.2
         onRunningChanged: root.beat = 0
     }
     component SessionDot: Rectangle {
@@ -546,6 +574,7 @@ Item {
                     ScriptAction {
                         script: {
                             panda.gulp();
+                            root.sfx("gulp");
                             root.expand("file");
                         }
                     }
@@ -574,8 +603,9 @@ Item {
                 running: root.mode !== "hidden" && root.mode !== "dots"
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
-                fps: root.mode === "expanded" ? 24 : root.dancing && !root.busy ? 8 : 12
                 eager: root.dragging
+                // in the small pill Emba is 34 px: 30 fps looks the same there and costs far less
+                smooth: !(root.mode === "compact" || root.mode === "dots")
                 music: root.dancing
                 bodyColor: App.cfg.color
 
@@ -583,7 +613,11 @@ Item {
 
                 gaze: dropZone.containsDrag ? Qt.point(dropZone.drag.x - x - width / 2, dropZone.drag.y - y - height / 2) : toy.visible ? Qt.point(toy.x + toy.width / 2 - x - width / 2, toy.y + toy.height / 2 - y - height / 2) : hover.hovered ? Qt.point(hover.point.position.x - x - width / 2, hover.point.position.y - y - height / 2) : cursor.gaze
 
-                onClicked: Pet.napping ? Pet.nap() : !root.open ? root.expand() : root.view === "care" ? boop() : root.expand("care")
+                onClicked: {
+                    if (root.open && !Pet.napping)
+                        root.sfx("boop");
+                    Pet.napping ? Pet.nap() : !root.open ? root.expand() : root.view === "care" ? boop() : root.expand("care");
+                }
                 onDoubleClicked: {
                     root.expand("care");
                     Pet.feed();
@@ -593,7 +627,10 @@ Item {
                     if (!Pet.napping)
                         Pet.nap();
                 }
-                onPetted: Pet.pet()
+                onPetted: {
+                    root.sfx("pet");
+                    Pet.pet();
+                }
             }
 
             // ---- pet things: a ball to chase, a bamboo snack ----

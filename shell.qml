@@ -38,10 +38,10 @@ ShellRoot {
         margins.left: App.cfg.marginX
         margins.right: App.cfg.marginX
 
-        // Room for the biggest view; everything outside the island itself
-        // is cut out of the input region, so clicks go straight through.
-        implicitWidth: 480 * s
-        implicitHeight: 380 * s
+        // Room for the island as it is now (all of it while it moves); outside
+        // the island itself is cut out of the input region, so clicks go through.
+        implicitWidth: island.needs.width * s
+        implicitHeight: island.needs.height * s
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay

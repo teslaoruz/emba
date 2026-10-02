@@ -623,7 +623,6 @@ Item {
 
     // Frames are capped: a soft little creature looks just as smooth at 30 fps,
     // and drawing is what costs. The island asks for less when Emba is small.
-    property real fps: 30
     property real pending: 0
     property point lastGaze
 
@@ -636,27 +635,37 @@ Item {
         return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || p.slot > 0.01 || p.chew > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
     }
 
-    // A plain timer, not FrameAnimation: FrameAnimation keeps Qt's render
-    // loop awake every vsync even when nothing moves, which cost ~15% CPU.
+    // Two clocks. While Emba moves, a FrameAnimation steps it once per screen
+    // refresh (60 Hz or more): motion as smooth as the display allows. While it
+    // only breathes and blinks, a 10 Hz timer is enough, and the render loop
+    // can sleep in between (a FrameAnimation would keep it awake for nothing).
+    property bool moving: true
     property real lastTick: 0
+    // false where Emba is tiny (the pill): a steady 30 fps timer instead of
+    // every display refresh, so the render loop can sleep between frames
+    property bool smooth: true
 
-    Timer {
-        id: ticker
-
-        running: root.running
-        repeat: true
-        interval: 1000 / root.fps
-        onTriggered: {
-            const now = Date.now();
-            const dt = root.lastTick ? (now - root.lastTick) / 1000 : interval / 1000;
-            root.lastTick = now;
-            // springs go unstable past ~1/20 s per step: slow frame rates take several
-            for (let left = Math.min(dt, 0.25); left > 1e-4; left -= 0.04)
-                root.step(Math.min(left, 0.04));
-            interval = 1000 / (root.busy() ? root.fps : Math.min(root.fps, 10));
-        }
-        onRunningChanged: root.lastTick = 0
+    function advance() {
+        const now = Date.now();
+        const dt = lastTick ? (now - lastTick) / 1000 : 0.016;
+        lastTick = now;
+        // springs go unstable past ~1/20 s per step: slow ticks take several
+        for (let left = Math.min(dt, 0.25); left > 1e-4; left -= 0.04)
+            step(Math.min(left, 0.04));
+        moving = busy();
     }
+
+    FrameAnimation {
+        running: root.running && root.moving && root.smooth
+        onTriggered: root.advance()
+    }
+    Timer {
+        running: root.running && (!root.moving || !root.smooth)
+        interval: root.moving ? 33 : 100
+        repeat: true
+        onTriggered: root.advance()
+    }
+    onRunningChanged: lastTick = 0
 
     // ---- drawing ----
     // Emba is built from scene-graph items (circles, ellipses, vector shapes)
