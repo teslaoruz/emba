@@ -273,6 +273,9 @@ Singleton {
                     full: m.full || m.target,
                     always: !!m.always,
                     rule: m.rule ?? "",
+                    // a question for you rather than a permission: [{question, header, options, multi}]
+                    questions: Array.isArray(m.questions) ? m.questions.slice(0, 4) : [],
+                    answerable: !!m.answerable,
                     name: s.name,
                     agent: s.agent,
                     sock: sock
@@ -293,7 +296,8 @@ Singleton {
     }
 
     // Answer the hook waiting on this request. behavior: allow | deny
-    function decide(id, behavior, always) {
+    // answers: {question text: chosen label(s)}, for a question rather than a permission
+    function decide(id, behavior, always, answers) {
         const req = pending.find(p => p.id === id);
         if (!req)
             return;
@@ -301,7 +305,8 @@ Singleton {
         if (req.sock?.connected) {
             req.sock.write(JSON.stringify({
                 behavior: behavior,
-                always: !!always
+                always: !!always,
+                answers: answers ?? undefined
             }) + "\n");
             req.sock.flush();
         }
@@ -886,6 +891,20 @@ Singleton {
             root.settingsOpen = true;
             root.refreshStatus();
             return "ok";
+        case "answer": {
+            // emba answer LABEL: answers every open question of the first request with LABEL
+            const q = root.pending[0];
+            if (!q?.questions?.length)
+                return "no question is waiting";
+            if (!q.answerable)
+                return "answer it in the agent's terminal";
+            const label = (args ?? []).join(" ");
+            const a = {};
+            for (const x of q.questions)
+                a[x.question] = label;
+            root.decide(q.id, "allow", false, a);
+            return "ok";
+        }
         case "allow":
         case "deny":
             if (!root.pending.length)

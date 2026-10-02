@@ -103,6 +103,40 @@ def target(tool, args):
     return ""
 
 
+# Tools that ask the person a question instead of asking to do something.
+QUESTION_TOOLS = {"AskUserQuestion", "request_user_input", "ask_user", "question"}
+
+
+def questions(args):
+    """The questions a question tool asks, in one shape for every agent."""
+    raw = args.get("questions")
+    if not isinstance(raw, list):
+        raw = [args]
+    out = []
+    for q in raw[:4]:
+        if not isinstance(q, dict):
+            continue
+        text = str(q.get("question") or q.get("prompt") or q.get("message") or "")[:2000]  # answers key on it
+        opts = []
+        for o in (q.get("options") or [])[:8]:
+            o = o if isinstance(o, dict) else {"label": str(o)}
+            opts.append({"label": str(o.get("label", ""))[:80], "description": str(o.get("description", ""))[:200]})
+        if text:
+            out.append({"question": text, "header": str(q.get("header", ""))[:40], "options": opts,
+                        "multi": bool(q.get("multiSelect") or q.get("multiple"))})
+    return out
+
+
+def readable(args):
+    """Tool arguments as short `key: value` lines, never raw JSON."""
+    lines = []
+    for k, v in args.items():
+        if isinstance(v, (dict, list)):
+            v = json.dumps(v, ensure_ascii=False)
+        lines.append(f"{k}: {v}")
+    return "\n".join(lines)[:2000]
+
+
 def hypr_window(pid):
     """Address of the Hyprland window that owns `pid` or one of its parents."""
     if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
@@ -215,13 +249,25 @@ def main():
         msg["text"] = p.get("last_assistant_message") or last_reply(p.get("transcript_path", ""))
     elif ev == "PermissionRequest":
         suggestions = p.get("permission_suggestions") or []
-        msg.update(id=p.get("tool_use_id") or f"{agent}-{os.getpid()}", full=target(tool, args) if tool == "Bash" else json.dumps(args, indent=1)[:2000],
+        asked = questions(args) if tool in QUESTION_TOOLS else []
+        if asked:
+            # only Claude Code takes answers from a hook; the others are answered in their terminal
+            msg.update(questions=asked, answerable=agent == "claude")
+        msg.update(id=p.get("tool_use_id") or f"{agent}-{os.getpid()}", full=target(tool, args) if tool == "Bash" else "" if asked else readable(args),
                    always=bool(suggestions),
                    rule=", ".join(r for s in suggestions if isinstance(s, dict) for r in (s.get("rules") or []))[:200])
         reply = send(msg, wait=True)
         if not reply or reply.get("behavior") not in ("allow", "deny"):
             return
         decision = {"behavior": reply["behavior"]}
+        answers = reply.get("answers")
+        if asked and reply["behavior"] == "allow":
+            if agent != "claude" or not isinstance(answers, dict) or not answers:
+                return  # no answers to give: the agent asks in its terminal
+            # AskUserQuestion takes its answers as {question text: chosen label(s)}
+            known = {q["question"] for q in asked}
+            decision["updatedInput"] = {**(p.get("tool_input") or {}),
+                                        "answers": {str(k): str(v)[:2000] for k, v in answers.items() if k in known}}
         if reply["behavior"] == "deny":
             decision["message"] = "Denied from emba."
         elif reply.get("always") and suggestions:

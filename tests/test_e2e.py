@@ -73,6 +73,17 @@ t.start()
 out = hook({**req, "tool_use_id": "toolu_3"})
 check(out == "", f"answer in terminal cancels quietly ({out!r})")
 
+q = {"hook_event_name": "PermissionRequest", "session_id": "t1", "cwd": str(APP), "tool_name": "AskUserQuestion",
+     "tool_use_id": "toolu_q", "tool_input": {"questions": [{"question": "Which one?", "header": "Pick", "multiSelect": False,
+                                                              "options": [{"label": "A"}, {"label": "B"}]}]}}
+later(1.5, "answer", "B")
+out = hook(q)
+check('"Which one?": "B"' in out and '"behavior": "allow"' in out, f"a question is answered with the option ({out!r})")
+
+later(1.5, "allow")
+out = hook({**q, "tool_use_id": "toolu_q2"})
+check(out == "", f"a question allowed without answers goes back to the terminal ({out!r})")
+
 hook({"hook_event_name": "SessionStart", "session_id": "cx", "cwd": str(APP)}, "--agent", "codex")
 later(1.5, "allow")
 out = hook({"hook_event_name": "PermissionRequest", "session_id": "cx", "cwd": str(APP), "tool_name": "Bash",

@@ -8,6 +8,7 @@ usage: emba [command]
   settings              open the settings window
   toggle | ask          open or close the island / open the ask box
   allow | deny          answer the oldest permission request
+  answer LABEL          answer the waiting question with LABEL
   set KEY VALUE         change a setting, e.g. emba set position top-left
   care, feed, play, nap, pet
                         look after Emba
@@ -451,7 +452,7 @@ def main():
         rc = subprocess.call(host_command())
         # `emba quit` ends Quickshell with SIGTERM: a clean exit, so a service manager does not restart it
         sys.exit(0 if rc == -15 else rc)
-    elif cmd in ("settings", "toggle", "open", "close", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue", "snapshot"):
+    elif cmd in ("settings", "toggle", "open", "close", "ask", "allow", "deny", "answer", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue", "snapshot"):
         if not running():
             start()
         reply = ipc(cmd, *rest)

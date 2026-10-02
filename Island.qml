@@ -792,7 +792,7 @@ Item {
                 sourceComponent: ({
                         overview: overviewView,
                         empty: emptyView,
-                        approval: approvalView,
+                        approval: root.pending[0]?.questions?.length ? questionView : approvalView,
                         finished: finishedView,
                         limit: limitView,
                         ask: askView,
@@ -838,7 +838,7 @@ Item {
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Escape) {
                     root.collapse();
-                } else if (root.view === "approval" && root.pending.length && root.armed) {
+                } else if (root.view === "approval" && root.pending.length && root.armed && !root.pending[0].questions?.length) {
                     if (event.key === Qt.Key_Y)
                         root.decide("allow");
                     else if (event.key === Qt.Key_N)
@@ -849,11 +849,11 @@ Item {
         }
     }
 
-    function decide(behavior, always) {
+    function decide(behavior, always, answers) {
         const req = pending[0];
         if (!req)
             return;
-        App.decide(req.id, behavior, always);
+        App.decide(req.id, behavior, always, answers);
         App.voiceHint = "";
         if (behavior === "allow")
             panda.emote("happy", 1);
@@ -1541,6 +1541,193 @@ Item {
                 visible: always.hovered && !!root.pending[0]?.rule
                 text: `from now on allows ${root.pending[0]?.rule ?? ""}`
                 font.pixelSize: 11
+            }
+        }
+    }
+
+    // ---- an agent asks you a question ----
+    // Pick an option (or type your own); Send gives Claude the answers. Agents
+    // whose hooks can't take answers get the question here and the answer box
+    // in their terminal.
+    Component {
+        id: questionView
+
+        ColumnLayout {
+            id: qv
+
+            readonly property var req: root.pending[0]
+            readonly property var qs: req?.questions ?? []
+            // per question: the labels picked, and anything typed
+            property var picked: ({})
+            property var typed: ({})
+            readonly property bool complete: qs.every(q => (picked[q.question] ?? []).length || (typed[q.question] ?? "").trim())
+
+            function toggle(q, label) {
+                const now = picked[q.question] ?? [];
+                const next = Object.assign({}, picked);
+                next[q.question] = q.multi ? (now.includes(label) ? now.filter(x => x !== label) : now.concat([label])) : [label];
+                picked = next;
+            }
+            function answers() {
+                const a = {};
+                for (const q of qs)
+                    a[q.question] = (typed[q.question] ?? "").trim() || (picked[q.question] ?? []).join(", ");
+                return a;
+            }
+
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Title {
+                    title: qv.req?.name ?? ""
+                    sub: (qv.qs.length > 1 ? `has ${qv.qs.length} questions` : "has a question") + (root.pending.length > 1 ? `  (1 of ${root.pending.length})` : "")
+                }
+                Link {
+                    text: "Terminal"
+                    onClicked: App.focus(qv.req?.sid ?? "")
+                }
+            }
+
+            Repeater {
+                model: qv.qs
+
+                ColumnLayout {
+                    id: one
+
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !!one.modelData.header
+                        text: one.modelData.header
+                        color: root.ui.accent
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: one.modelData.question
+                        color: root.ui.text
+                        font.pixelSize: 14
+                        wrapMode: Text.Wrap
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Repeater {
+                            model: one.modelData.options ?? []
+
+                            Rectangle {
+                                id: opt
+
+                                required property var modelData
+                                readonly property bool on: (qv.picked[one.modelData.question] ?? []).includes(modelData.label)
+
+                                width: Math.min(optLabel.implicitWidth + 24, qv.width)
+                                height: 30
+                                radius: 15
+                                color: on ? root.ui.accent : oh.hovered && qv.req?.answerable ? root.ui.fillHover : root.ui.fill
+
+                                Behavior on color { ColorAnimation { duration: 120 } }
+
+                                Text {
+                                    id: optLabel
+
+                                    anchors.centerIn: parent
+                                    width: Math.min(implicitWidth, parent.width - 24)
+                                    text: opt.modelData.label
+                                    color: opt.on ? root.ui.accentInk : root.ui.text
+                                    font.pixelSize: 13
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+                                HoverHandler { id: oh; cursorShape: qv.req?.answerable ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                                TapHandler {
+                                    enabled: !!qv.req?.answerable
+                                    onTapped: qv.toggle(one.modelData, opt.modelData.label)
+                                }
+                            }
+                        }
+                    }
+                    // what the option you picked means
+                    Dim {
+                        Layout.fillWidth: true
+                        visible: text !== ""
+                        text: (one.modelData.options ?? []).find(o => (qv.picked[one.modelData.question] ?? []).includes(o.label))?.description ?? ""
+                        wrapMode: Text.Wrap
+                        font.pixelSize: 12
+                    }
+                    // your own words instead of an option
+                    Rectangle {
+                        Layout.fillWidth: true
+                        visible: !!qv.req?.answerable
+                        implicitHeight: 34
+                        radius: 17
+                        color: root.ui.fill
+
+                        TextInput {
+                            id: own
+
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: root.ui.text
+                            font.pixelSize: 13
+                            clip: true
+                            onTextChanged: {
+                                const next = Object.assign({}, qv.typed);
+                                next[one.modelData.question] = text;
+                                qv.typed = next;
+                            }
+                            onAccepted: if (qv.complete)
+                                root.decide("allow", false, qv.answers())
+
+                            Text {
+                                visible: !own.text
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Or type an answer…"
+                                color: root.ui.faint
+                                font.pixelSize: 13
+                            }
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                spacing: 10
+
+                Pill {
+                    visible: !!qv.req?.answerable
+                    text: "Not now"
+                    onClicked: root.decide("deny")
+                }
+                Pill {
+                    visible: !!qv.req?.answerable
+                    text: "Send"
+                    primary: true
+                    opacity: qv.complete ? 1 : 0.4
+                    onClicked: if (qv.complete)
+                        root.decide("allow", false, qv.answers())
+                }
+                // this agent can't take answers from Emba: hand the question back to its terminal
+                Pill {
+                    visible: !qv.req?.answerable
+                    text: "Answer in terminal"
+                    primary: true
+                    onClicked: {
+                        const r = qv.req;
+                        App.cancelPending(p => p === r);
+                        App.focus(r?.sid ?? "");
+                    }
+                }
             }
         }
     }
