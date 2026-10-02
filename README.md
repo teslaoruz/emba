@@ -50,7 +50,7 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 <br>
 <img src="docs/moods.png" width="760" alt="Emba's moods: idle, working, thinking, listening, needs you, done, dancing, stretching, sleepy, petted">
 <br><br>
-<img src="docs/views.png" width="760" alt="The island: a permission request, the sessions overview, a finished task, hovering the corner, and the small pill">
+<img src="docs/views.png" width="760" alt="The island: a permission request, the sessions overview, a finished task, and the small pill while an agent works">
 </div>
 
 ## Install
