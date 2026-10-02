@@ -4,9 +4,20 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Services.Mpris
 import qs
 
 ShellRoot {
+    // music for Emba to dance to
+    Binding {
+        target: App
+        property: "music"
+        value: {
+            const p = Mpris.players.values.find(x => x.isPlaying);
+            return p ? (p.trackTitle || p.identity || "music") : "";
+        }
+    }
+
     PanelWindow {
         id: win
 

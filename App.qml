@@ -21,6 +21,7 @@ Singleton {
             scale: 1,
             color: "#e2683c",        // Emba's fur
             hideWhenIdle: true,      // only a small nub while nothing runs
+            danceToMusic: true,      // pop out and dance while music plays
             autoOpenOnPermission: true,
             celebrate: true,         // pop open when a session finishes
             collapseDelay: 1200,     // ms after the cursor leaves
@@ -137,6 +138,8 @@ Singleton {
     // open permission requests, oldest first: { sid, id, tool, full, always, name, sock }
     property var pending: []
     property var limits: ({})
+    // the song playing now ("" when none); set by the host (MPRIS on Linux)
+    property string music: ""
     property real lastActivity: Date.now()
 
     signal finished(string sid)

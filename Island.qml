@@ -58,7 +58,8 @@ Item {
     // busy: something is working, asking or just finished. Otherwise Emba
     // tucks away into its corner until the mouse comes looking.
     readonly property bool busy: pending.length > 0 || sessions.some(s => ["working", "thinking", "waiting", "done"].includes(s.state))
-    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dragging || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
+    readonly property bool dancing: !!App.music && App.cfg.danceToMusic !== false
+    readonly property string mode: open ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dragging || dancing || !App.cfg.hideWhenIdle) ? "compact" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -455,8 +456,9 @@ Item {
                 running: root.mode !== "hidden"
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
-                fps: root.mode === "expanded" ? 24 : 12
+                fps: root.mode === "expanded" ? 24 : root.dancing && !root.busy ? 8 : 12
                 eager: root.dragging
+                music: root.dancing
                 bodyColor: App.cfg.color
 
                 Behavior on px { NumberAnimation { duration: root.opening ? 520 : 340; easing.type: root.opening ? Easing.OutBack : Easing.InOutCubic } }
@@ -592,7 +594,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, 190)
                     elide: Text.ElideRight
-                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : ""
+                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.busy && root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : root.dancing ? `♪ ${App.music}` : root.focusSession?.name ?? ""
                     color: root.pending.length ? Theme.warn : Theme.text
                     font.pixelSize: 12
                     font.weight: Font.Medium

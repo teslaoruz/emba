@@ -26,6 +26,8 @@ Item {
     property bool eager: false
     // left alone for a while, Emba entertains itself
     property bool lively: true
+    // music is playing: dance whenever nothing else is going on
+    property bool music: false
 
     signal clicked
     signal petted
@@ -179,6 +181,13 @@ Item {
 
     function step(dt) {
         p.t += dt;
+        for (const c of sparkles.children) {
+            if (c.age === undefined)
+                continue;
+            c.age += dt;
+            if (c.age > 1.2)
+                c.destroy();
+        }
         const t = p.t;
         const m = root.mood;
 
@@ -286,7 +295,9 @@ Item {
 
         // ---- a life of its own when nothing is going on ----
         const calm = (m === "idle" || m === "lonely") && !e && !root.eager && !root.gaze;
-        if (root.lively && calm && !p.act) {
+        if (root.music && ["idle", "lonely", "done"].includes(m) && !e && !root.eager && !p.act)
+            act("dance");
+        else if (root.lively && calm && !p.act) {
             p.nextAct -= dt;
             if (p.nextAct <= 0) {
                 const pool = ["dance", "hop", "stretch", "lookaround", "wave", "tailchase", "spin", "sneeze", "hop", "lookaround"];
@@ -511,7 +522,7 @@ Item {
         const s = root.width / 100;
         for (let i = 0; i < n; i++) {
             const sweat = glyph === "●";
-            particle.createObject(fx, {
+            particle.createObject(sparkles, {
                 text: glyph,
                 color: colour,
                 x: root.width / 2 + (sweat ? 30 * s : (Math.random() * 60 - 30) * s),
@@ -527,7 +538,7 @@ Item {
     function confetti() {
         const s = root.width / 100;
         const colours = ["#ffd166", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#fb923c"];
-        bit.createObject(fx, {
+        bit.createObject(sparkles, {
             color: colours[Math.floor(Math.random() * colours.length)],
             x: root.width / 2 + (Math.random() * 50 - 25) * s,
             y: root.height / 2 - 10 * s,
@@ -542,31 +553,27 @@ Item {
     Component {
         id: particle
 
+        // stepped by Emba's own timer (see step): an animation here would run
+        // at full refresh rate and cost ~10% CPU while dancing
         Text {
             id: pt
 
             property real dx
             property real dy
             property real px
+            property real x0
+            property real y0
+            property real age: 0
+            readonly property real k: 1 - Math.pow(1 - Math.min(1, age / 1.2), 2)  // ease out
 
+            Component.onCompleted: { x0 = x; y0 = y; }
+            x: x0 + dx * k
+            y: y0 + dy * k
+            scale: 0.4 + 0.8 * k
+            rotation: -15 + 30 * Math.min(1, age / 1.2)
+            opacity: age < 0.15 ? age / 0.15 : age < 0.8 ? 1 : Math.max(0, 1 - (age - 0.8) / 0.4)
             font.pixelSize: px
             font.bold: true
-            opacity: 0
-
-            ParallelAnimation {
-                running: true
-                onFinished: pt.destroy()
-
-                NumberAnimation { target: pt; property: "x"; to: pt.x + pt.dx; duration: 1200; easing.type: Easing.OutQuad }
-                NumberAnimation { target: pt; property: "y"; to: pt.y + pt.dy; duration: 1200; easing.type: Easing.OutQuad }
-                NumberAnimation { target: pt; property: "scale"; from: 0.4; to: 1.2; duration: 1200; easing.type: Easing.OutBack }
-                NumberAnimation { target: pt; property: "rotation"; from: -15; to: 15; duration: 1200 }
-                SequentialAnimation {
-                    NumberAnimation { target: pt; property: "opacity"; to: 1; duration: 150 }
-                    PauseAnimation { duration: 650 }
-                    NumberAnimation { target: pt; property: "opacity"; to: 0; duration: 400 }
-                }
-            }
         }
     }
 
@@ -613,7 +620,7 @@ Item {
         const g = root.gaze, moved = g && Math.hypot(g.x - lastGaze.x, g.y - lastGaze.y) > 3;
         if (g)
             lastGaze = g;
-        return moved || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
+        return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
     }
 
     // A plain timer, not FrameAnimation: FrameAnimation keeps Qt's render
@@ -630,7 +637,9 @@ Item {
             const now = Date.now();
             const dt = root.lastTick ? (now - root.lastTick) / 1000 : interval / 1000;
             root.lastTick = now;
-            root.step(Math.min(dt, 0.1));
+            // springs go unstable past ~1/20 s per step: slow frame rates take several
+            for (let left = Math.min(dt, 0.25); left > 1e-4; left -= 0.04)
+                root.step(Math.min(left, 0.04));
             interval = 1000 / (root.busy() ? root.fps : Math.min(root.fps, 10));
         }
         onRunningChanged: root.lastTick = 0
@@ -1002,7 +1011,7 @@ Item {
     }
 
     Item {
-        id: fx
+        id: sparkles
 
         anchors.fill: parent
     }

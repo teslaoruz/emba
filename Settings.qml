@@ -322,6 +322,11 @@ Rectangle {
                     onToggled: on => App.setCfg({ hideWhenIdle: on })
                 }
                 Toggle {
+                    text: "Dance when music plays"
+                    checked: App.cfg.danceToMusic
+                    onToggled: on => App.setCfg({ danceToMusic: on })
+                }
+                Toggle {
                     text: "Eyes follow the mouse"
                     checked: App.cfg.trackCursor
                     onToggled: on => App.setCfg({ trackCursor: on })
