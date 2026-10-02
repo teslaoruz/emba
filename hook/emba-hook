@@ -229,6 +229,33 @@ def main():
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))
         return
     send(msg)
+    if agent == "codex" and ev in ("Stop", "UserPromptSubmit"):
+        codex_limits(p.get("transcript_path", ""))
+
+
+def codex_limits(path):
+    """Codex writes its rate limits into the session log; send the latest."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 200_000))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return
+    for line in reversed(lines):
+        if '"rate_limits"' not in line:
+            continue
+        try:
+            rl = json.loads(line).get("payload", {}).get("rate_limits") or {}
+        except ValueError:
+            continue
+        names = {300: "5 hours", 10080: "This week", 43200: "This month"}
+        windows = [{"label": names.get(w.get("window_minutes"), f"{w.get('window_minutes', 0) // 60} hours"),
+                    "used": w.get("used_percent"), "resets": w.get("resets_at") or 0}
+                   for w in (rl.get("primary"), rl.get("secondary")) if isinstance(w, dict)]
+        if windows:
+            send({"ev": "Limits", "agent": "codex", "model": rl.get("plan_type") or "", "windows": windows})
+        return
 
 
 if __name__ == "__main__":

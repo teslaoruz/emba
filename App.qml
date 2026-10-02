@@ -316,27 +316,41 @@ Singleton {
             pending = pending.filter(p => p.id !== sock.pendingId);
     }
 
+    // m.windows: [{ label, used (0-100), resets (unix s) }] for one agent;
+    // Claude's statusline sends five_hour / seven_day instead
     function updateLimits(m) {
-        const next = {
-            model: m.model || limits.model || ""
-        };
-        for (const w of ["five_hour", "seven_day"]) {
-            const r = m[w];
-            const pct = r ? Math.round(r.used_percentage ?? r.utilization ?? r.used ?? -1) : -1;
-            next[w] = pct >= 0 ? {
-                used: pct,
-                resets: r.resets_at ?? 0
-            } : limits[w];
-            const was = limits[w]?.used ?? 0;
-            if (pct >= cfg.limitWarn && was < cfg.limitWarn)
-                root.limitWarning(w, pct);
+        const agent = /^[a-z]{1,20}$/.test(m.agent ?? "") ? m.agent : "claude";
+        const windows = (m.windows ?? [["Right now", m.five_hour], ["This week", m.seven_day]].filter(x => x[1]).map(([label, r]) => ({
+                        label: label,
+                        used: r.used_percentage ?? r.utilization ?? r.used,
+                        resets: r.resets_at ?? 0
+                    }))).filter(w => typeof w.used === "number").map(w => ({
+                    label: String(w.label),
+                    used: Math.round(w.used),
+                    resets: Number(w.resets) || 0
+                }));
+        const old = limits[agent] ?? {};
+        for (const w of windows) {
+            const was = (old.windows ?? []).find(o => o.label === w.label)?.used ?? 0;
+            if (w.used >= cfg.limitWarn && was < cfg.limitWarn) {
+                root.limitWarning(`${agent} ${w.label}`, w.used);
                 root.fire("limit", {
-                    window: w,
-                    percent: pct
+                    agent: agent,
+                    window: w.label,
+                    percent: w.used
                 });
+            }
         }
+        const next = Object.assign({}, limits);
+        next[agent] = {
+            model: m.model || old.model || "",
+            windows: windows.length ? windows : (old.windows ?? [])
+        };
         limits = next;
     }
+    readonly property int maxUsed: Object.values(limits).reduce((a, l) => Math.max(a, ...l.windows.map(w => w.used)), 0)
+    // "claude 42% · codex 85%": the fullest window of each agent
+    readonly property string usageLine: Object.keys(limits).filter(k => limits[k].windows.length).map(k => `${k} ${Math.max(...limits[k].windows.map(w => w.used))}%`).join(" · ")
 
     // Quickshell ignores Qt.quit(), so there Emba ends its own process; the Qt
     // host (no processId) quits normally.
@@ -493,7 +507,7 @@ Singleton {
     property var chat: null
     property bool followUp: false
     property real answeredAt: 0
-    readonly property string modelLabel: limits.model ?? ""
+    readonly property string modelLabel: limits.claude?.model ?? ""
     readonly property bool canContinue: !!chat && chat.tool !== "ollama" && (chat.tool !== "claude" || !!chat.id)
 
     function ask(prompt, files) {
@@ -881,6 +895,7 @@ Singleton {
         case "state":
             return JSON.stringify({
                 sessions: root.sessions,
+                limits: root.limits,
                 pending: root.pending.map(p => ({
                             id: p.id,
                             tool: p.tool,

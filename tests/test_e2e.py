@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -80,6 +81,14 @@ check('"behavior": "allow"' in out, "codex permission")
 
 out = hook({"hook_event_name": "BeforeAgent", "session_id": "gm", "cwd": str(APP), "prompt": "hi"}, "--agent", "gemini")
 check(out == "{}", "gemini gets JSON on stdout")
+
+log = Path(tempfile.gettempdir()) / "emba-codex-log.jsonl"
+log.write_text(json.dumps({"payload": {"type": "token_count", "rate_limits": {
+    "primary": {"used_percent": 82.0, "window_minutes": 300, "resets_at": 1}, "secondary": None}}}) + "\n")
+hook({"hook_event_name": "Stop", "session_id": "cx", "cwd": str(APP), "transcript_path": str(log)}, "--agent", "codex")
+time.sleep(0.5)
+w = (state().get("limits", {}).get("codex") or {}).get("windows") or [{}]
+check(w[0].get("used") == 82 and w[0].get("label") == "5 hours", f"codex usage read from its log ({w})")
 
 emba("quit")
 time.sleep(1)

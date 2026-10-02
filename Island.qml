@@ -211,12 +211,12 @@ Item {
         if (!s || s.state === "idle") {
             if (Pet.napping)
                 return "sleeping";
-            if (Pet.need && !(s && Math.max(App.limits.five_hour?.used ?? 0, App.limits.seven_day?.used ?? 0) >= App.cfg.limitWarn))
+            if (Pet.need && !(s && App.maxUsed >= App.cfg.limitWarn))
                 return Pet.need;
         }
         if (!s)
             return "idle";
-        if (s.state === "idle" && Math.max(App.limits.five_hour?.used ?? 0, App.limits.seven_day?.used ?? 0) >= App.cfg.limitWarn)
+        if (s.state === "idle" && App.maxUsed >= App.cfg.limitWarn)
             return "limit";
         return {
             thinking: "thinking",
@@ -1111,6 +1111,9 @@ Item {
             Title {
                 title: root.sessions.length === 1 ? "Working on 1 thing" : `Working on ${root.sessions.length} things`
                 dot: Theme.ok
+                sub: App.usageLine
+
+                TapHandler { onTapped: root.expand("limit") }
             }
 
             Repeater {
@@ -1204,6 +1207,14 @@ Item {
                 wrapMode: Text.Wrap
                 visible: !empty.connected
                 text: "Let me keep an eye on your coding agents."
+            }
+            Dim {
+                visible: empty.connected && !!App.usageLine
+                text: `Used: ${App.usageLine}`
+                font.pixelSize: 11
+
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: root.expand("limit") }
             }
             Pill {
                 visible: !empty.connected
@@ -1352,12 +1363,19 @@ Item {
             spacing: 8
 
             Title {
-                title: "Running low"
-                sub: App.modelLabel ?? ""
-                dot: Theme.limit
+                title: App.maxUsed >= App.cfg.limitWarn ? "Running low" : "Usage"
+                dot: App.maxUsed >= App.cfg.limitWarn ? Theme.limit : Theme.ok
+            }
+            Dim {
+                visible: !App.usageLine
+                text: "Nothing to show yet. Claude shows up once its status line is connected (emba connect claude --statusline); Codex after its first reply."
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+                Layout.rightMargin: 18
             }
             Repeater {
-                model: [["Right now", App.limits.five_hour], ["This week", App.limits.seven_day]].filter(x => x[1])
+                // [label, { used, resets }] for every agent's windows
+                model: [].concat(...Object.keys(App.limits).map(k => App.limits[k].windows.map(w => [`${k} · ${w.label.toLowerCase()} · ${w.used}%`, w])))
 
                 ColumnLayout {
                     required property var modelData
