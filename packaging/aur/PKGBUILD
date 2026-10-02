@@ -6,7 +6,7 @@ pkgrel=1
 pkgdesc="A red panda that keeps an eye on your coding agents (Claude Code, Codex, Gemini CLI, opencode)"
 arch=('any')
 url="https://github.com/teslaoruz/emba"
-license=('MIT')
+license=('GPL-3.0-or-later')
 depends=('python' 'quickshell')
 optdepends=(
     'python-pyside6: run on desktops without layer-shell (GNOME, X11)'

@@ -10,8 +10,11 @@ Approve what they want to run without going back to the terminal, see what each 
 and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and opencode.
 
 [![CI](https://github.com/teslaoruz/emba/actions/workflows/ci.yml/badge.svg)](https://github.com/teslaoruz/emba/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-e2683c)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-e2683c)](LICENSE)
 ![Linux · macOS · Windows](https://img.shields.io/badge/runs%20on-Linux%20·%20macOS%20·%20Windows-3a2420)
+[![Release](https://img.shields.io/github/v/release/teslaoruz/emba?color=3a2420)](https://github.com/teslaoruz/emba/releases)
+
+**[Install](#install)** · **[Features](#what-it-does)** · **[Agents](#agents)** · **[Using it](#using-it)** · **[Plugins](#plugins)** · **[Troubleshooting](#troubleshooting)** · **[License](#license)**
 
 <img src="docs/demo.gif" width="500" alt="Emba noticing a session, asking for permission, and celebrating when it is done">
 
@@ -19,16 +22,24 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 
 ## What it does
 
+### Stay in charge of your agents
+
 - **Answer permission requests from anywhere.** When an agent wants to run a command or edit a
   file, Emba pops up with exactly what it wants to do. Allow, deny, or always allow. The terminal
   prompt stays live too; whichever you answer first wins.
+- **Answer their questions too.** When Claude asks you something, Emba shows the question and its
+  options; click one, or type your own answer. Other agents' questions are shown plainly, with a
+  button that takes you to their terminal.
 - **See every session at a glance.** What each agent is doing right now, in plain words.
   Click a session to jump to its terminal.
 - **Many agents at once.** Any number of sessions from Claude Code, Codex, Gemini CLI and opencode,
-  side by side; a small badge says which agent each one is.
+  side by side, each with its project, folder, running time and its agent's colour. With nothing
+  busy, a tiny row of coloured dots stays in the corner.
 - **Keep an eye on usage.** How much of each usage window is left, for every agent that reports it
   (Claude through its status line, Codex from its own logs). Emba warns you when one runs low.
 - **Know when it's done.** Emba flips, sparkles and shows the last reply.
+### Ask, show, talk
+
 - **Ask a quick question.** A small ask box that uses the agent you already have, on your own
   account: no API keys. Pick who answers: Claude, Codex, opencode, Gemini, or a local Ollama model.
   Follow up in place, or continue the conversation in the agent's own terminal (the terminal you
@@ -37,11 +48,14 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 - **Feed it files.** Drop a file on Emba to ask about it.
 - **Talk to it** (optional). Shake the mouse or say "Hey Emba", ask out loud, hear the answer.
   Speech is recognised and spoken on your computer; nothing is sent anywhere.
+### A companion, not a dashboard
+
 - **It has a life of its own.** Left alone, Emba dances, stretches, hops, sneezes and chases its
   tail; while an agent works it types on a tiny laptop, and it cheers with confetti when work is done.
   Put on some music and it pops out and dances along (Linux, any MPRIS player).
 - **Look after it.** Emba gets hungry, sleepy and a bit lonely. Rub the cursor over it to pet it,
   double-click to feed it bamboo, click the island to throw it a ball, hold it to tuck it in.
+- **Little sounds**, if you want them: a chime when an agent needs you, a jingle when it's done.
 - **Make it yours.** It follows your desktop's colours (Caelestia, pywal, or your own), sits in
   any corner, and can be extended with plugins.
 
@@ -54,6 +68,12 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
 </div>
 
 ## Install
+
+| | Needs |
+|---|---|
+| Linux | Python 3.9+. On Wayland with layer-shell, [Quickshell](https://quickshell.org); anywhere else the installer sets up Qt for you |
+| macOS | Python 3.9+ (the installer sets up Qt) |
+| Windows | Python 3.9+ (the installer sets up Qt) |
 
 **Linux and macOS**
 
@@ -70,7 +90,8 @@ irm https://raw.githubusercontent.com/teslaoruz/emba/main/install.ps1 | iex
 **Arch Linux**: build the package from [`packaging/aur`](packaging/aur/PKGBUILD) with `makepkg -si`.
 
 The installer asks before connecting any agent and shows you every change it makes to an agent's
-settings; each file gets a backup first. Nothing needs admin rights. To remove everything later:
+settings; each file gets a backup first. It also asks whether you want voice (free local speech
+models, about 250 MB); you can add or remove that later in Settings. Nothing needs admin rights. To remove everything later:
 `./install.sh --uninstall` (or `install.ps1 --uninstall`).
 
 On Wayland desktops with layer-shell (Hyprland, Sway, niri, KDE…) Emba runs on
@@ -79,15 +100,17 @@ On Wayland desktops with layer-shell (Hyprland, Sway, niri, KDE…) Emba runs on
 
 ## Agents
 
-| Agent | Watch sessions | Answer permissions from Emba | Ask box |
-|---|:-:|:-:|:-:|
-| Claude Code | ✓ | ✓ | ✓ |
-| Codex | ✓ | ✓ | ✓ |
-| opencode | ✓ | ✓ (first 30 s, then the terminal) | ✓ |
-| Gemini CLI | ✓ | points you to the terminal | ✓ |
-| Ollama | | | ✓ |
+| Agent | Watch sessions | Answer permissions | Answer questions | Usage | Ask box |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Claude Code | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Codex | ✓ | ✓ | in its terminal | ✓ | ✓ |
+| opencode (1.x and 2.x) | ✓ | ✓ (first 30 s, then the terminal) | in its terminal | | ✓ |
+| Gemini CLI | ✓ | points you to the terminal | in its terminal | | ✓ |
+| Ollama | | | | | ✓ |
 
-Connect any or all of them in **Settings → Agents**, or with `emba connect`.
+Connect any or all of them in **Settings → Agents**, or with `emba connect`. **Add an agent** in
+Settings shows how to install the ones you don't have yet. Any other agent with Claude Code style
+hooks can report to Emba too: point its hooks at `hook/emba-hook --agent its-name`.
 
 **Free options.** Emba itself is free and open source. For the ask box you can use Gemini CLI's
 free tier, opencode's free models, or a model running on your own machine with Ollama.
@@ -127,6 +150,9 @@ Everything is in the settings window. Behind it is a plain file,
 | `focusCommand` | | command to focus a session's terminal; `{window}` `{pid}` `{cwd}` are filled in |
 | `limitWarn` | `80` | warn at this % of any agent's usage window |
 | `danceToMusic` | `true` | pop out and dance while music plays |
+| `sounds`, `soundVolume` | `true`, `0.5` | little sound effects, and how loud |
+| `voice`, `voiceReply` | `false`, `true` | talk to Emba; have it read answers aloud |
+| `voiceShake`, `voiceWake` | `true`, `false` | shake the mouse to talk; listen for "Hey Emba" |
 
 `emba set KEY VALUE` changes one from the command line.
 A custom theme is a `~/.config/emba/theme.json` with any of `base surface text dim primary ok warn
@@ -144,10 +170,13 @@ emba ask "question"      ask, and show the answer
 emba look                drag a rectangle on screen and ask about it
 emba listen              talk to Emba
 emba allow | deny        answer the oldest permission request
+emba answer "option"     answer the waiting question
 emba feed | play | nap   look after Emba
 emba connect [AGENT]     connect claude, codex, gemini, opencode (shows each change first)
 emba disconnect [AGENT]
 emba autostart on|off
+emba voice-install       set up voice (free, local, ~250 MB)
+emba voice-remove        remove it again
 emba doctor              check everything Emba needs
 emba plugins [new NAME]  list plugins, or start your own
 ```
@@ -177,6 +206,18 @@ See **[PLUGINS.md](PLUGINS.md)** for everything a plugin can do.
 - No telemetry, no accounts, no keys. Emba talks to your agents over a local socket only your user
   can open. Voice runs entirely on your computer.
 
+## Troubleshooting
+
+- **Run `emba doctor` first.** It checks everything Emba needs and says what to fix.
+- **Nothing shows up for an agent.** Check it's switched on in Settings → Agents, then start a
+  new session of that agent (running sessions keep their old settings).
+- **Emba doesn't hear you.** Shaking the mouse should show "Listening". If it then says it heard
+  nothing, the microphone isn't picking up your voice: check the input device and its level in your
+  system's sound settings.
+- **The island is in the wrong place.** Pick a corner in Settings → Where.
+- **Still stuck?** [Open an issue](https://github.com/teslaoruz/emba/issues) with the output of
+  `emba doctor`.
+
 ## How it works
 
 ```
@@ -201,10 +242,21 @@ python tests/test_e2e.py     # end-to-end check against a running Emba
 
 ## Credits
 
-Inspired by [coucou](https://github.com/louis-CFM/coucou) by Louis Raillé, a notch companion for
-Claude Code on macOS. Emba is its own code and its own character.
+Emba is written from scratch: its code, its character and its look are its own. The idea of a
+companion living at the edge of the screen comes from notch apps such as
+[coucou](https://github.com/louis-CFM/coucou). Sound effects by [Kenney](https://kenney.nl)
+(public domain).
 
-Not affiliated with Anthropic, OpenAI, Google or SST. Claude, Codex, Gemini and opencode are
-trademarks of their owners.
+## Disclaimer
 
-[MIT licensed](LICENSE).
+Emba is an independent open-source project. It is not affiliated with, endorsed by or sponsored by
+Anthropic, OpenAI, Google, SST or any other company whose tools it works with. Claude, Claude Code,
+Codex, Gemini, opencode and other names are trademarks of their respective owners and are used only
+to say which tools Emba works with.
+
+## License
+
+Emba's code is free software under the [GNU General Public License v3.0](LICENSE): you may use,
+study, share and change it, and anything you share that is built from it must stay under the same
+license, with its source. The name "Emba" and the Emba character are covered separately in
+[LICENSE-ASSETS.md](LICENSE-ASSETS.md): forks are welcome, under their own name and character.

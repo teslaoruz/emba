@@ -5,3 +5,13 @@ dev/*.pid
 dev/answer.txt
 __pycache__/
 .venv/
+dev/mframes/
+dev/walk/
+dev/cf/
+dev/df/
+dev/v/
+dev/bt/
+dev/pk/
+dev/micrec*/
+dev/*.wav
+dev/*.out
