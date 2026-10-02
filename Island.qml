@@ -924,7 +924,9 @@ Item {
             write("cursorpos");
             flush();
         }
+        // Hyprland's reply has no newline: take it as it arrives
         parser: SplitParser {
+            splitMarker: ""
             onRead: line => {
                 const m = line.match(/(-?\d+),\s*(-?\d+)/);
                 if (m)
