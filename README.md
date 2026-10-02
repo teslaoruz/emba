@@ -96,12 +96,13 @@ free tier, opencode's free models, or a model running on your own machine with O
 
 | | |
 |---|---|
-| Open or close | hover the island, or `emba toggle` |
+| Open or close | hover the island; click anywhere else or press <kbd>Esc</kbd> to close; `emba toggle` |
 | Allow / deny | click, or press <kbd>Y</kbd> / <kbd>N</kbd> after clicking the island |
 | Ask | click "Ask…", or `emba ask "your question"` |
-| Ask about the screen | ⛶ in the ask box, or `emba look` |
+| Ask about the screen | the frame icon in the ask box, or `emba look` |
 | Talk | shake the mouse, say "Hey Emba", or `emba listen` |
-| Settings | the ⚙ on the island, or `emba settings` |
+| Settings | right-click the island, or `emba settings` |
+| Look after Emba | rub the cursor over it to pet, double-click to feed, click to throw a ball, hold to tuck in |
 
 Voice commands for Emba itself: *"eat"*, *"play"*, *"go to sleep"*, *"wake up"*,
 *"look at my screen"*, *"settings"*. Saying *"allow"* while a request is open only highlights the

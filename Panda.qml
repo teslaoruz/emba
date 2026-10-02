@@ -136,8 +136,6 @@ Item {
         property real earR: 0
         property real tail: 0
         property real tailVel: 0
-        property real glow: 0
-        property color glowColor: "transparent"
         property real laptop: 0
         // timers
         property real nextBlink: 2
@@ -483,8 +481,6 @@ Item {
             p.roll += Math.sin(t * 46) * 0.2 * (p.shakeLeft / 0.6);
         }
 
-        p.glowColor = moodColours[m] ?? "#00000000";
-        p.glow = approach(p.glow, (m === "idle" || !moodColours[m]) ? 0 : 0.5 + 0.12 * Math.sin(t * 3), 5, dt);
 
         spawnParticles(m, e, dt);
     }
@@ -713,26 +709,6 @@ Item {
         y: root.height / 2 + 2 * root.width / 100
         scale: root.width / 100
         transformOrigin: Item.TopLeft
-
-        // glow behind, in the mood colour
-        Shape {
-            visible: p.glow > 0.01
-            preferredRendererType: Shape.CurveRenderer
-
-            ShapePath {
-                strokeColor: "transparent"
-                fillGradient: RadialGradient {
-                    centerX: 0
-                    centerY: 4
-                    centerRadius: 52
-                    focalX: 0
-                    focalY: 4
-                    GradientStop { position: 0.15; color: Qt.alpha(p.glowColor, p.glow * 0.55) }
-                    GradientStop { position: 1; color: Qt.alpha(p.glowColor, 0) }
-                }
-                PathAngleArc { centerX: 0; centerY: 4; radiusX: 52; radiusY: 52; startAngle: 0; sweepAngle: 360 }
-            }
-        }
 
         // ground shadow: smaller and fainter the higher Emba hops
         Ell {
@@ -1014,29 +990,6 @@ Item {
         id: sparkles
 
         anchors.fill: parent
-    }
-
-    // speech badge above the head for states that want attention
-    Rectangle {
-        readonly property string glyph: root.mood === "waiting" ? "!" : root.mood === "question" ? "?" : root.mood === "thinking" ? "…" : ""
-
-        visible: glyph !== ""
-        x: root.width * 0.68 + p.sway * root.width / 100
-        y: root.height * 0.0 + p.bob * root.width / 100 + Math.sin(p.t * 4) * 2
-        width: root.width * 0.24
-        height: width
-        radius: width / 2
-        color: root.moodColours[root.mood] ?? "#f5a524"
-        scale: visible ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
-
-        Text {
-            anchors.centerIn: parent
-            text: parent.glyph
-            color: "white"
-            font.pixelSize: parent.width * 0.7
-            font.bold: true
-        }
     }
 
     HoverHandler {

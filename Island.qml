@@ -51,6 +51,20 @@ Item {
     }
 
     readonly property var sessions: App.sessions
+
+    // The island's own palette, like a phone's notch: black, white type, and
+    // Emba's fur as the only accent. (Settings still follows the desktop theme.)
+    readonly property QtObject ui: QtObject {
+        readonly property color bg: "#000000"
+        readonly property color text: "#ffffff"
+        readonly property color dim: Qt.rgba(1, 1, 1, 0.6)
+        readonly property color faint: Qt.rgba(1, 1, 1, 0.36)
+        readonly property color fill: Qt.rgba(1, 1, 1, 0.1)
+        readonly property color fillHover: Qt.rgba(1, 1, 1, 0.16)
+        readonly property color accent: App.cfg.color || "#e2683c"
+        readonly property color accentInk: "#ffffff"
+        readonly property color error: "#ff453a"
+    }
     readonly property bool mixedAgents: new Set(sessions.map(x => x.agent ?? "claude")).size > 1
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
@@ -264,9 +278,9 @@ Item {
             atRight: root.edgeRight
             radius: root.mode === "expanded" ? 30 : Math.min(shape.height / 2, 22)
             ear: root.mode === "hidden" ? 0 : Math.min(16, shape.height / 3)
-            fill: Theme.base
+            fill: root.ui.bg
             // a glow along the outline while something waits on you
-            stroke: root.pending.length && root.mode !== "expanded" ? Qt.alpha(Theme.warn, pulse.value) : Qt.alpha(Theme.text, 0.06)
+            stroke: root.pending.length && root.mode !== "expanded" ? Qt.alpha(root.ui.accent, pulse.value) : "transparent"
             strokeWidth: root.pending.length && root.mode !== "expanded" ? 2 : 1
             opacity: root.mode === "hidden" ? 0 : 1
 
@@ -346,7 +360,13 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 z: -1
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: mouse => {
+                    // right-click anywhere on the island: settings
+                    if (mouse.button === Qt.RightButton) {
+                        App.settingsOpen = true;
+                        return App.refreshStatus();
+                    }
                     if (!root.open)
                         return root.expand();
                     if (root.view === "care" && !Pet.napping) {
@@ -446,11 +466,11 @@ Item {
                 id: panda
 
                 // sized so the whole drawing (ears, paws, tail, hops) fits each shape
-                property real px: root.mode === "expanded" ? 96 : root.mode === "peek" ? 56 : root.mode === "compact" ? 34 : 20
+                property real px: root.mode === "expanded" ? 72 : root.mode === "peek" ? 56 : root.mode === "compact" ? 34 : 20
 
                 width: px
                 height: px
-                x: root.mode === "expanded" ? 12 : root.mode === "compact" && !root.sideways ? 8 : (shape.width - px) / 2
+                x: root.mode === "expanded" ? 14 : root.mode === "compact" && !root.sideways ? 8 : (shape.width - px) / 2
                 y: root.mode === "expanded" ? Math.min(18, (shape.height - px) / 2) : root.mode === "compact" && root.sideways ? 6 : (shape.height - px) / 2
                 opacity: root.mode === "hidden" ? 0 : 1
                 running: root.mode !== "hidden"
@@ -595,7 +615,7 @@ Item {
                     width: Math.min(implicitWidth, 190)
                     elide: Text.ElideRight
                     text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.busy && root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : root.dancing ? `♪ ${App.music}` : root.focusSession?.name ?? ""
-                    color: root.pending.length ? Theme.warn : Theme.text
+                    color: root.pending.length ? root.ui.accent : root.ui.text
                     font.pixelSize: 12
                     font.weight: Font.Medium
                 }
@@ -613,7 +633,7 @@ Item {
                             width: 6
                             height: 6
                             radius: 3
-                            color: App.stateColours[modelData.state] ?? Theme.dim
+                            color: modelData.state === "waiting" ? root.ui.accent : ["working", "thinking"].includes(modelData.state) ? root.ui.text : root.ui.faint
                         }
                     }
                 }
@@ -638,7 +658,7 @@ Item {
                         width: 6
                         height: 6
                         radius: 3
-                        color: App.stateColours[modelData.state] ?? Theme.dim
+                        color: modelData.state === "waiting" ? root.ui.accent : ["working", "thinking"].includes(modelData.state) ? root.ui.text : root.ui.faint
                     }
                 }
             }
@@ -647,9 +667,9 @@ Item {
             Loader {
                 id: content
 
-                x: 116
-                y: 16
-                width: shape.width - (root.view === "approval" ? 132 : 156)  // clear of the ✕ and ⚙ column
+                x: 98
+                y: 18
+                width: shape.width - 98 - 22
                 active: root.mode === "expanded"
                 opacity: root.mode === "expanded" ? 1 : 0
                 sourceComponent: ({
@@ -670,29 +690,6 @@ Item {
                     SequentialAnimation {
                         PauseAnimation { duration: root.mode === "expanded" ? 160 : 0 }
                         NumberAnimation { duration: root.mode === "expanded" ? 300 : 120 }
-                    }
-                }
-            }
-
-            // close and settings, stacked in the top-right corner, out of the content's way
-            Column {
-                visible: root.mode === "expanded" && root.view !== "approval"
-                opacity: content.opacity
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.rightMargin: 8
-                anchors.topMargin: 8
-                spacing: 2
-
-                Corner {
-                    glyph: "✕"
-                    onClicked: root.collapse()
-                }
-                Corner {
-                    glyph: "⚙"
-                    onClicked: {
-                        App.settingsOpen = true;
-                        App.refreshStatus();
                     }
                 }
             }
@@ -890,37 +887,15 @@ Item {
     }
 
     component Label: Text {
-        color: Theme.text
-        font.pixelSize: 13
+        color: root.ui.text
+        font.pixelSize: 14
         wrapMode: Text.Wrap
     }
 
     component Dim: Text {
-        color: Theme.dim
-        font.pixelSize: 12
+        color: root.ui.dim
+        font.pixelSize: 13
         elide: Text.ElideRight
-    }
-
-    // a small round icon button for the corner
-    component Corner: Rectangle {
-        id: corner
-
-        property string glyph
-        signal clicked
-
-        width: 24
-        height: 24
-        radius: 12
-        color: Qt.alpha(Theme.text, ch.hovered ? 0.1 : 0)
-
-        Text {
-            anchors.centerIn: parent
-            text: corner.glyph
-            color: ch.hovered ? Theme.text : Theme.faint
-            font.pixelSize: 12
-        }
-        HoverHandler { id: ch; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: corner.clicked() }
     }
 
     // a round, drawn icon: "mic" (talk) or "area" (point at the screen)
@@ -930,13 +905,13 @@ Item {
         property string kind
         property string hint
         readonly property bool hovered: tih.hovered
-        readonly property color ink: tih.hovered ? Theme.primary : Theme.dim
+        readonly property color ink: tih.hovered ? root.ui.accent : root.ui.dim
         signal clicked
 
         width: 30
         height: 30
         radius: 15
-        color: Qt.alpha(Theme.text, tih.hovered ? 0.12 : 0.05)
+        color: Qt.alpha(root.ui.text, tih.hovered ? 0.12 : 0.05)
         scale: tit.pressed ? 0.9 : 1
 
         Behavior on color { ColorAnimation { duration: 120 } }
@@ -982,18 +957,33 @@ Item {
         TapHandler { id: tit; onTapped: ti.clicked() }
     }
 
-    // a word you can click: for everything that is not the main decision
-    component Link: Text {
+    // a small secondary action: everything that is not the main decision
+    component Link: Rectangle {
         id: link
 
+        property string text
         signal clicked
 
-        color: lh.hovered ? Theme.text : Theme.dim
-        font.pixelSize: 12
-        font.underline: lh.hovered
+        implicitWidth: linkLabel.implicitWidth + 24
+        implicitHeight: 28
+        radius: 14
+        color: lh.hovered ? root.ui.fillHover : root.ui.fill
+        scale: lt.pressed ? 0.95 : 1
 
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on scale { NumberAnimation { duration: 90 } }
+
+        Text {
+            id: linkLabel
+
+            anchors.centerIn: parent
+            text: link.text
+            color: root.ui.text
+            font.pixelSize: 13
+            font.weight: Font.Medium
+        }
         HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: link.clicked() }
+        TapHandler { id: lt; onTapped: link.clicked() }
     }
 
     component Pill: Rectangle {
@@ -1006,13 +996,13 @@ Item {
         readonly property bool hovered: ph.hovered
         signal clicked
 
-        implicitWidth: label.implicitWidth + 28
-        implicitHeight: 30
-        radius: 15
-        color: primary ? (ph.hovered ? Qt.lighter(Theme.primary, 1.08) : Theme.primary) : Qt.alpha(Theme.text, ph.hovered ? 0.15 : 0.08)
+        implicitWidth: Math.max(72, label.implicitWidth + 32)
+        implicitHeight: 34
+        radius: 17
+        color: primary ? (ph.hovered ? Qt.lighter(root.ui.accent, 1.1) : root.ui.accent) : (ph.hovered ? root.ui.fillHover : root.ui.fill)
         scale: tap.pressed ? 0.94 : hinted ? hintPulse.value : 1
         border.width: hinted ? 2 : 0
-        border.color: Theme.warn
+        border.color: root.ui.accent
 
         QtObject {
             id: hintPulse
@@ -1035,9 +1025,9 @@ Item {
 
             anchors.centerIn: parent
             text: pill.text
-            color: pill.primary ? Theme.onPrimary : Theme.text
-            font.pixelSize: 13
-            font.weight: Font.Medium
+            color: pill.primary ? root.ui.accentInk : root.ui.text
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
         }
 
         HoverHandler { id: ph; cursorShape: Qt.PointingHandCursor }
@@ -1047,27 +1037,22 @@ Item {
     component Title: RowLayout {
         property string title
         property string sub
-        property color dot: Theme.dim
 
         Layout.fillWidth: true
-        Layout.rightMargin: 18
-        spacing: 6
+        spacing: 8
 
-        Rectangle {
-            width: 7
-            height: 7
-            radius: 4
-            color: parent.dot
-        }
         Text {
             text: parent.title
-            color: Theme.text
-            font.pixelSize: 13
+            color: root.ui.text
+            font.pixelSize: 15
             font.weight: Font.DemiBold
         }
-        Dim {
+        Text {
             Layout.fillWidth: true
             text: parent.sub
+            color: root.ui.dim
+            font.pixelSize: 13
+            elide: Text.ElideRight
         }
     }
 
@@ -1077,13 +1062,13 @@ Item {
         Layout.fillWidth: true
         implicitHeight: 32
         radius: 16
-        color: Qt.alpha(Theme.text, af.hovered ? 0.09 : 0.05)
+        color: Qt.alpha(root.ui.text, af.hovered ? 0.09 : 0.05)
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
             x: 14
             text: `Ask ${App.askLabel}…`
-            color: Theme.faint
+            color: root.ui.faint
             font.pixelSize: 13
         }
         HoverHandler { id: af; cursorShape: Qt.IBeamCursor }
@@ -1113,7 +1098,6 @@ Item {
 
             Title {
                 title: root.sessions.length === 1 ? "Working on 1 thing" : `Working on ${root.sessions.length} things`
-                dot: Theme.ok
                 sub: App.usageLine
 
                 TapHandler { onTapped: root.expand("limit") }
@@ -1122,7 +1106,7 @@ Item {
             // every session of every agent; past four it scrolls
             Flickable {
                 Layout.fillWidth: true
-                implicitHeight: Math.min(rows.implicitHeight, 3 * 44 + 22)  // half a row peeks out: there is more
+                implicitHeight: Math.min(rows.implicitHeight, 3 * 52 + 26)  // half a row peeks out: there is more
                 contentHeight: rows.implicitHeight
                 clip: contentHeight > height
                 interactive: contentHeight > height
@@ -1143,40 +1127,32 @@ Item {
                     required property var modelData
 
                     width: rows.width
-                    implicitHeight: 40
+                    implicitHeight: 48
                     radius: 12
-                    color: Qt.alpha(Theme.text, rh.hovered ? 0.07 : 0.035)
+                    color: Qt.alpha(root.ui.text, rh.hovered ? 0.07 : 0.035)
 
                     HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: App.focus(srow.modelData.sid) }
 
-                    Rectangle {
-                        x: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 7
-                        height: 7
-                        radius: 4
-                        color: App.stateColours[srow.modelData.state] ?? Theme.dim
-                        // still: an endless pulse here kept the whole island redrawing
-                    }
-
                     Column {
-                        x: 27
+                        x: 14
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - (root.mixedAgents ? 90 : 37)
+                        width: parent.width - (root.mixedAgents ? 90 : 28)
 
                         Text {
                             width: parent.width
                             text: srow.modelData.name
-                            color: Theme.text
-                            font.pixelSize: 13
-                            font.weight: Font.Medium
+                            color: root.ui.text
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
-                        Dim {
+                        Text {
                             width: parent.width
-                            text: root.plain(srow.modelData.ticker.slice(-1)[0]) || "ready"
-                            font.pixelSize: 11
+                            text: srow.modelData.state === "waiting" ? "Needs you" : root.plain(srow.modelData.ticker.slice(-1)[0]) || "Ready"
+                            color: srow.modelData.state === "waiting" ? root.ui.accent : root.ui.dim
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
                         }
                     }
 
@@ -1189,14 +1165,14 @@ Item {
                         width: badge.implicitWidth + 12
                         height: 16
                         radius: 8
-                        color: Qt.alpha(Theme.text, 0.08)
+                        color: Qt.alpha(root.ui.text, 0.08)
 
                         Text {
                             id: badge
 
                             anchors.centerIn: parent
                             text: srow.modelData.agent ?? "claude"
-                            color: Theme.dim
+                            color: root.ui.dim
                             font.pixelSize: 10
                         }
                     }
@@ -1240,25 +1216,18 @@ Item {
 
             spacing: 10
 
-            Label {
-                Layout.topMargin: 6
-                text: empty.connected ? "All quiet." : "Hi, I'm Emba!"
-                font.pixelSize: 15
-                font.weight: Font.Medium
+            Title {
+                title: empty.connected ? "All quiet" : "Hi, I'm Emba"
+                sub: empty.connected ? App.usageLine : ""
+
+                HoverHandler { cursorShape: App.usageLine ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                TapHandler { onTapped: if (App.usageLine) root.expand("limit") }
             }
             Dim {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 visible: !empty.connected
                 text: "Let me keep an eye on your coding agents."
-            }
-            Dim {
-                visible: empty.connected && !!App.usageLine
-                text: `Used: ${App.usageLine}`
-                font.pixelSize: 11
-
-                HoverHandler { cursorShape: Qt.PointingHandCursor }
-                TapHandler { onTapped: root.expand("limit") }
             }
             Pill {
                 visible: !empty.connected
@@ -1288,10 +1257,9 @@ Item {
                     Layout.rightMargin: 0
                     title: parent.parent.req?.name ?? ""
                     sub: root.asks(parent.parent.req?.tool ?? "") + (root.pending.length > 1 ? `  (1 of ${root.pending.length})` : "")
-                    dot: Theme.warn
                 }
                 Link {
-                    text: "terminal ↗"
+                    text: "Terminal"
                     onClicked: App.focus(root.pending[0]?.sid ?? "")
                 }
             }
@@ -1300,7 +1268,7 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: Math.min(code.implicitHeight, 110) + 18
                 radius: 12
-                color: Theme.surface
+                color: root.ui.fill
                 clip: true
 
                 Text {
@@ -1310,7 +1278,7 @@ Item {
                     y: 9
                     width: parent.width - 20
                     text: root.pending[0]?.full ?? ""
-                    color: Theme.text
+                    color: root.ui.text
                     font.family: Qt.platform.os === "windows" ? "Consolas" : Qt.platform.os === "osx" ? "Menlo" : "monospace"
                     font.pixelSize: 12
                     wrapMode: Text.WrapAnywhere
@@ -1363,13 +1331,12 @@ Item {
             Title {
                 title: parent.sess?.name ?? "Your agent"
                 sub: "is done"
-                dot: Theme.ok
             }
             Label {
                 Layout.fillWidth: true
                 visible: text !== ""
                 text: parent.sess?.text ?? ""
-                color: Theme.dim
+                color: root.ui.dim
                 font.pixelSize: 12
                 maximumLineCount: 4
                 elide: Text.ElideRight
@@ -1379,7 +1346,7 @@ Item {
                 spacing: 14
 
                 Link {
-                    text: "open terminal ↗"
+                    text: "Open terminal"
                     onClicked: {
                         App.focus(root.finishedSid);
                         root.collapse();
@@ -1391,7 +1358,7 @@ Item {
                     Link {
                         required property var modelData
 
-                        text: modelData.label.toLowerCase()
+                        text: modelData.label
                         onClicked: Quickshell.execDetached(modelData.argv)
                     }
                 }
@@ -1408,7 +1375,6 @@ Item {
 
             Title {
                 title: App.maxUsed >= App.cfg.limitWarn ? "Running low" : "Usage"
-                dot: App.maxUsed >= App.cfg.limitWarn ? Theme.limit : Theme.ok
             }
             Dim {
                 visible: !App.usageLine
@@ -1441,13 +1407,13 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: 5
                         radius: 3
-                        color: Qt.alpha(Theme.text, 0.08)
+                        color: Qt.alpha(root.ui.text, 0.08)
 
                         Rectangle {
                             width: parent.width * Math.min(1, modelData[1].used / 100)
                             height: parent.height
                             radius: 3
-                            color: modelData[1].used >= 90 ? Theme.error : Theme.limit
+                            color: modelData[1].used >= 90 ? root.ui.error : root.ui.accent
                         }
                     }
                 }
@@ -1478,7 +1444,7 @@ Item {
                         width: chip.implicitWidth + 18
                         height: 24
                         radius: 12
-                        color: on ? Theme.primary : Qt.alpha(Theme.text, chipHover.hovered ? 0.1 : 0.05)
+                        color: on ? root.ui.accent : Qt.alpha(root.ui.text, chipHover.hovered ? 0.1 : 0.05)
 
                         Behavior on color { ColorAnimation { duration: 140 } }
 
@@ -1487,7 +1453,7 @@ Item {
 
                             anchors.centerIn: parent
                             text: parent.modelData
-                            color: parent.on ? Theme.onPrimary : Theme.dim
+                            color: parent.on ? root.ui.accentInk : root.ui.dim
                             font.pixelSize: 12
                             font.weight: parent.on ? Font.DemiBold : Font.Normal
                         }
@@ -1512,7 +1478,7 @@ Item {
                         width: Math.min(fname.implicitWidth + 16, 200)
                         height: 22
                         radius: 11
-                        color: Qt.alpha(Theme.text, 0.08)
+                        color: Qt.alpha(root.ui.text, 0.08)
 
                         Text {
                             id: fname
@@ -1520,7 +1486,7 @@ Item {
                             anchors.centerIn: parent
                             width: Math.min(implicitWidth, 184)
                             text: modelData.split(/[\\/]/).pop()
-                            color: Theme.dim
+                            color: root.ui.dim
                             font.pixelSize: 11
                             elide: Text.ElideMiddle
                         }
@@ -1532,9 +1498,9 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: 40
                 radius: 20
-                color: Theme.surface
+                color: root.ui.fill
                 border.width: 1
-                border.color: input.activeFocus ? Qt.alpha(Theme.text, 0.2) : Qt.alpha(Theme.text, 0.06)
+                border.color: input.activeFocus ? Qt.alpha(root.ui.text, 0.2) : Qt.alpha(root.ui.text, 0.06)
 
                 TextInput {
                     id: input
@@ -1546,7 +1512,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 16
                     anchors.rightMargin: 8
-                    color: Theme.text
+                    color: root.ui.text
                     font.pixelSize: 13
                     clip: true
                     focus: true
@@ -1563,7 +1529,7 @@ Item {
                         visible: !input.text
                         anchors.verticalCenter: parent.verticalCenter
                         text: micIcon.hovered ? micIcon.hint : areaIcon.hovered ? areaIcon.hint : root.files.length ? "What about it?" : `Ask ${App.askLabel}…`
-                        color: Theme.faint
+                        color: root.ui.faint
                         font.pixelSize: 13
                     }
                 }
@@ -1605,7 +1571,6 @@ ToolIcon {
             Title {
                 title: App.asking ? `${App.askLabel} is thinking…` : App.askError ? "That didn't work" : App.askLabel
                 sub: App.heard ? `“${App.heard}”` : ""
-                dot: App.askError ? Theme.error : Theme.thinking
                 opacity: App.asking ? shimmer.value : 1
             }
 
@@ -1624,7 +1589,7 @@ ToolIcon {
                     selectByMouse: true
                     wrapMode: TextEdit.Wrap
                     text: App.askError || App.answer
-                    color: App.askError ? Theme.error : Theme.text
+                    color: App.askError ? root.ui.error : root.ui.text
                     font.pixelSize: 13
                     textFormat: TextEdit.MarkdownText
                 }
@@ -1636,17 +1601,17 @@ ToolIcon {
 
                 Link {
                     visible: App.asking
-                    text: "stop"
+                    text: "Stop"
                     onClicked: App.cancelAsk()
                 }
                 Link {
                     visible: !App.asking && !App.askError
-                    text: "copy"
+                    text: "Copy"
                     onClicked: root.copy(App.answer)
                 }
                 Link {
                     visible: !App.asking && !App.askError
-                    text: "follow up"
+                    text: "Follow up"
                     onClicked: {
                         App.followUp = true;
                         root.files = [];
@@ -1655,7 +1620,7 @@ ToolIcon {
                 }
                 Link {
                     visible: !App.asking && !App.askError && App.canContinue
-                    text: "continue in terminal ↗"
+                    text: "Continue in terminal"
                     onClicked: App.continueInTerminal()
                 }
             }
@@ -1671,11 +1636,10 @@ ToolIcon {
 
             Title {
                 title: root.files.length === 1 ? root.files[0].split(/[\\/]/).pop() : `${root.files.length} files`
-                dot: Theme.ok
             }
             AskField {}
             Link {
-                text: "copy path"
+                text: "Copy path"
                 onClicked: {
                     root.copy(root.files.join(" "));
                     root.collapse();
@@ -1690,14 +1654,14 @@ ToolIcon {
         Rectangle {
             implicitHeight: 96
             radius: 16
-            color: Qt.alpha(Theme.ok, 0.08)
+            color: Qt.alpha(root.ui.dim, 0.08)
             border.width: 1.5
-            border.color: Theme.ok
+            border.color: root.ui.dim
 
             Label {
                 anchors.centerIn: parent
                 text: "Feed it to Emba"
-                color: Theme.ok
+                color: root.ui.dim
             }
         }
     }
@@ -1716,15 +1680,11 @@ ToolIcon {
                         sleepy: "is sleepy",
                         lonely: "missed you"
                     }[Pet.need] ?? "is happy")
-                dot: Pet.need ? Theme.warn : Theme.ok
             }
-            // no buttons: Emba is looked after with the mouse (and voice)
+            // no buttons and no instructions: rub, double-click, click, hold (see README)
             Dim {
-                Layout.fillWidth: true
-                text: Pet.napping ? "Click to wake." : "Rub to pet · double-click to feed\nclick here to throw a ball · hold to tuck in"
-                wrapMode: Text.Wrap
-                font.pixelSize: 11
-                lineHeight: 1.2
+                visible: Pet.napping
+                text: "Click to wake"
             }
         }
     }
@@ -1738,7 +1698,6 @@ ToolIcon {
 
             Title {
                 title: App.voiceState === "thinking" ? "Got it…" : App.voiceError ? "Didn't catch that" : "Listening"
-                dot: App.voiceError ? Theme.error : Theme.working
             }
 
             // a little equaliser that follows the microphone
@@ -1758,7 +1717,7 @@ ToolIcon {
                         width: 5
                         height: 6 + 34 * App.voiceLevel * k * (0.6 + 0.4 * Math.abs(Math.sin(index * 1.7 + App.voiceLevel * 9)))
                         radius: 3
-                        color: Theme.working
+                        color: root.ui.dim
 
                         Behavior on height { NumberAnimation { duration: 90 } }
                     }
@@ -1771,11 +1730,11 @@ ToolIcon {
                 visible: App.voiceState === ""
 
                 Link {
-                    text: "try again"
+                    text: "Try again"
                     onClicked: App.listen()
                 }
                 Link {
-                    text: "type instead"
+                    text: "Type instead"
                     onClicked: root.expand("ask")
                 }
             }
