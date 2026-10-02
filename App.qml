@@ -22,6 +22,8 @@ Singleton {
             color: "#e2683c",        // Emba's fur
             hideWhenIdle: true,      // only a small nub while nothing runs
             danceToMusic: true,      // pop out and dance while music plays
+            sounds: true,            // little sound effects
+            soundVolume: 0.5,
             autoOpenOnPermission: true,
             celebrate: true,         // pop open when a session finishes
             collapseDelay: 1200,     // ms after the cursor leaves
@@ -385,17 +387,50 @@ Singleton {
     property bool listening: false
 
     // One Emba at a time: if another one already answers on the socket, this
-    // one bows out instead of stealing the socket from under it.
+    // one bows out instead of stealing the socket from under it. Unless the one
+    // answering is this same process: Quickshell reloading Emba's files keeps
+    // the old copy running until the new one is up, and that is not a rival.
+    readonly property string myPid: typeof Quickshell.processId === "number" ? String(Quickshell.processId) : ""
     Socket {
         id: probe
 
         path: root.socketPath
         onConnectedChanged: if (connected) {
-            console.log("emba: already running, leaving");
-            root.leave();
+            write(JSON.stringify({
+                ev: "ipc",
+                cmd: "pid"
+            }) + "\n");
+            flush();
+            rivalTimer.restart();
+        }
+        parser: SplitParser {
+            onRead: line => {
+                let pid = "";
+                try {
+                    pid = JSON.parse(line).reply ?? "";
+                } catch (e) {}
+                rivalTimer.stop();
+                probe.connected = false;
+                if (root.myPid && pid === root.myPid) {
+                    root.listening = true;  // ourselves, from before a reload: take over
+                } else {
+                    console.log("emba: already running, leaving");
+                    root.leave();
+                }
+            }
         }
         onError: root.listening = true  // nobody there: our turn
         Component.onCompleted: connected = true
+    }
+    // an older Emba that doesn't answer "pid" is still another Emba
+    Timer {
+        id: rivalTimer
+
+        interval: 1000
+        onTriggered: {
+            console.log("emba: already running, leaving");
+            root.leave();
+        }
     }
     Timer {
         interval: 500
@@ -484,6 +519,8 @@ Singleton {
     // ollama (local).
     property bool asking: false
     property string answer: ""
+    property string partial: ""   // the answer so far, while it streams in
+    property string rawOut: ""    // everything the tool printed, for tools that don't stream JSON
     property string askError: ""
     property string errText: ""
     property var askCode: null
@@ -529,10 +566,19 @@ Singleton {
     readonly property string modelLabel: limits.claude?.model ?? ""
     readonly property bool canContinue: !!chat && chat.tool !== "ollama" && (chat.tool !== "claude" || !!chat.id)
 
+    // a fresh conversation: the next question starts over
+    function newChat() {
+        cancelAsk();
+        chat = null;
+        answer = "";
+        askError = "";
+    }
+
     function ask(prompt, files) {
         if (!prompt.trim() || asking)
             return;
-        const cont = followUp && chat && chat.tool === askTool;
+        // in a conversation, every question follows on from the last answer (same agent, same chat)
+        const cont = !!chat && chat.tool === askTool && (followUp || chat.turns.length > 0) && !files?.length;
         followUp = false;
         if (!cont)
             chat = {
@@ -554,9 +600,13 @@ Singleton {
             cmd = askCommand(askTool, text, files);
         }
         if (askTool === "claude")
-            cmd = cmd.concat(["--output-format", "json"]);  // for the session id
+            // streamed: the answer appears as it is written; the last line has the session id
+            cmd = cmd.concat(["--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
         chat.pending = prompt;
+        chat = Object.assign({}, chat);  // show the question at once
         answer = "";
+        partial = "";
+        rawOut = "";
         askError = "";
         errText = "";
         askCode = null;
@@ -566,25 +616,65 @@ Singleton {
         askProc.running = true;
     }
 
-    function gotAnswer(out) {
-        let text = out.trim();
-        if (chat?.tool === "claude") {
-            try {
-                const j = JSON.parse(text);
-                text = (j.result ?? "").trim();
-                chat.id = j.session_id ?? chat.id;
-                if (j.is_error)
-                    askError = text || "Claude returned an error";
-            } catch (e) {}
+    // one line of output while the answer is being written
+    function gotLine(line) {
+        if (chat?.tool !== "claude") {
+            rawOut += line + "\n";
+            partial = rawOut.trim();
+            return;
         }
-        if (chat && text) {
+        let j;
+        try {
+            j = JSON.parse(line);
+        } catch (e) {
+            return;
+        }
+        const d = j.event?.delta;
+        if (j.type === "stream_event" && d?.type === "text_delta")
+            partial += d.text;
+        else if (j.type === "rate_limit_event" && j.rate_limit_info?.unifiedWindows) {
+            // the answer also says how much of each usage window is used
+            const w = j.rate_limit_info.unifiedWindows;
+            updateLimits({
+                agent: "claude",
+                windows: [["Right now", w.five_hour], ["This week", w.seven_day]].filter(x => x[1]?.utilization !== undefined).map(([label, x]) => ({
+                            label: label,
+                            used: x.utilization * 100,
+                            resets: x.resetsAt ?? 0
+                        }))
+            });
+        } else if (j.result !== undefined && j.session_id) {
+            chat.id = j.session_id;
+            rawOut = String(j.result);
+            if (j.is_error)
+                askError = rawOut.trim() || "Claude returned an error";
+        }
+    }
+
+    function gotAnswer() {
+        if (cancelled) {  // stopped: the half-written answer is dropped with its question
+            cancelled = false;
+            if (chat) {
+                chat.pending = "";
+                chat = Object.assign({}, chat);
+            }
+            partial = "";
+            return;
+        }
+        // Claude: what was streamed is the answer (its final "result" can carry CLI notices)
+        const text = (chat?.tool === "claude" ? partial || rawOut : rawOut).trim();
+        if (chat && text && !askError) {
             chat.turns = chat.turns.concat([{
                     q: chat.pending,
                     a: text
-                }]).slice(-6);
+                }]).slice(-20);
+        }
+        if (chat) {
+            chat.pending = "";
             chat = Object.assign({}, chat);  // notify bindings
         }
         answer = text;
+        partial = "";
         answeredAt = Date.now();
     }
 
@@ -602,7 +692,10 @@ Singleton {
             run(["terminal", chat.cwd].concat(argv));
     }
 
+    property bool cancelled: false
     function cancelAsk() {
+        if (asking)
+            cancelled = true;
         askProc.running = false;
         asking = false;
     }
@@ -615,8 +708,8 @@ Singleton {
                 EMBA_QUIET: "1"
             })
 
-        stdout: StdioCollector {
-            onStreamFinished: root.gotAnswer(text)
+        stdout: SplitParser {
+            onRead: line => root.gotLine(line)
         }
         // stderr is only an error if the tool failed; many print progress there
         stderr: StdioCollector {
@@ -628,6 +721,7 @@ Singleton {
         }
         onExited: code => {
             root.askCode = code;
+            root.gotAnswer();
             root.asking = false;
             if (code !== 0)
                 root.askError = root.errText || `${root.askTool} exited with ${code}`;
@@ -928,6 +1022,8 @@ Singleton {
                 });
                 return "ok";
             }
+        case "pid":
+            return root.myPid;
         case "state":
             return JSON.stringify({
                 sessions: root.sessions,

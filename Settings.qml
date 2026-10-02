@@ -429,6 +429,21 @@ Rectangle {
                     onToggled: on => App.setCfg({ hideWhenIdle: on })
                 }
                 Toggle {
+                    text: "Sounds"
+                    hint: "a pop, a chime when an agent asks, a jingle when it's done"
+                    checked: App.cfg.sounds !== false
+                    onToggled: on => App.setCfg({ sounds: on })
+                }
+                Labelled {
+                    visible: App.cfg.sounds !== false
+                    text: "Volume"
+                    Segmented {
+                        options: [["Quiet", 0.25], ["Normal", 0.5], ["Loud", 0.9]]
+                        value: App.cfg.soundVolume ?? 0.5
+                        onPicked: v => App.setCfg({ soundVolume: v })
+                    }
+                }
+                Toggle {
                     text: "Dance when music plays"
                     checked: App.cfg.danceToMusic
                     onToggled: on => App.setCfg({ danceToMusic: on })

@@ -28,7 +28,7 @@ from PySide6.QtQml import (ListProperty, QQmlApplicationEngine, QQmlComponent, Q
                            qmlRegisterType)
 
 APP = Path(__file__).resolve().parent.parent
-SHARED = ["App.qml", "Theme.qml", "Pet.qml", "Island.qml", "Notch.qml", "Panda.qml", "Settings.qml"]
+SHARED = ["App.qml", "Theme.qml", "Pet.qml", "Island.qml", "Notch.qml", "Panda.qml", "Settings.qml", "Sounds.qml"]
 
 
 def socket_address():

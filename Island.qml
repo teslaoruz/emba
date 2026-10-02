@@ -106,7 +106,7 @@ Item {
     // views that stay open after the cursor leaves
     // what you are typing in the ask box; an empty ask box is not worth holding open
     property string draft: ""
-    readonly property bool sticky: ["approval", "result", "file", "drop", "listen"].includes(view) || (view === "ask" && draft !== "") || App.asking || App.voiceState !== ""
+    readonly property bool sticky: ["approval", "result", "file", "drop", "listen"].includes(view) || (view === "ask" && (draft !== "" || !!App.chat?.turns?.length)) || App.asking || App.voiceState !== ""
 
     // userOpened: you opened it (hover, click, a command) rather than Emba
     // popping up by itself; only then may it take the keyboard and close on
@@ -304,7 +304,8 @@ Item {
             return greeting ? Qt.size(122, 70) : Qt.size(76, 70);
         if (mode === "compact")
             return sideways ? Qt.size(44, 52 + Math.min(sessions.length, 6) * 10 + 4) : Qt.size(Math.min(300, 58 + compactLabel.implicitWidth + 14 + Math.min(sessions.length, 6) * 10 + 8), 44);
-        return Qt.size(460, Math.max(132, Math.min(360, (content.item?.implicitHeight ?? 100) + 30)));
+        // a conversation may grow taller than the other views
+        return Qt.size(460, Math.max(132, Math.min(view === "ask" && App.chat?.turns?.length ? 440 : 360, (content.item?.implicitHeight ?? 100) + 30)));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
     // How much window the island needs right now (unscaled): all of it while
@@ -628,7 +629,7 @@ Item {
                         Pet.nap();
                 }
                 onPetted: {
-                    root.sfx("pet");
+                    root.sfx("love");
                     Pet.pet();
                 }
             }
@@ -838,7 +839,7 @@ Item {
                         drop: dropView,
                         listen: listenView,
                         care: careView
-                    })[App.asking && root.view === "ask" ? "result" : root.view] ?? emptyView
+                    })[root.view === "result" ? "ask" : root.view] ?? emptyView  // answers live in the conversation
 
                 Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 0 } }
             }
@@ -1876,12 +1877,20 @@ Item {
         id: askView
 
         ColumnLayout {
+            id: askCol
+
+            readonly property var turns: App.chat?.turns ?? []
+            readonly property bool talking: turns.length > 0 || !!App.chat?.pending
+
             spacing: 8
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
 
             // who answers: only tools that are installed show up
             Flow {
                 Layout.fillWidth: true
-                Layout.rightMargin: 18
                 spacing: 4
 
                 Repeater {
@@ -1910,6 +1919,128 @@ Item {
                         HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
                         TapHandler { onTapped: App.setCfg({ askWith: parent.modelData }) }
                     }
+                }
+            }
+                Link {
+                    visible: askCol.talking
+                    text: "New chat"
+                    onClicked: {
+                        App.newChat();
+                        root.files = [];
+                    }
+                }
+            }
+
+            // the conversation: your questions on the right, answers on the left;
+            // the newest stays in view, and the answer being written grows in place
+            Flickable {
+                id: convo
+
+                Layout.fillWidth: true
+                visible: askCol.talking || !!App.askError
+                implicitHeight: Math.min(lines.implicitHeight, 270)
+                contentHeight: lines.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                onContentHeightChanged: contentY = Math.max(0, contentHeight - height)
+
+                Column {
+                    id: lines
+
+                    width: convo.width
+                    spacing: 8
+
+                    Repeater {
+                        model: askCol.turns.concat(App.chat?.pending ? [{
+                                q: App.chat.pending,
+                                a: App.partial,
+                                live: true
+                            }] : [])
+
+                        Column {
+                            id: turn
+
+                            required property var modelData
+                            required property int index
+
+                            width: lines.width
+                            spacing: 8
+
+                            // you
+                            Rectangle {
+                                anchors.right: parent.right
+                                width: Math.min(qText.implicitWidth + 24, parent.width * 0.8)
+                                height: qText.implicitHeight + 14
+                                radius: 14
+                                color: Qt.alpha(root.ui.accent, 0.22)
+
+                                Text {
+                                    id: qText
+
+                                    x: 12
+                                    y: 7
+                                    width: Math.min(implicitWidth, turn.width * 0.8 - 24)
+                                    text: turn.modelData.q
+                                    color: root.ui.text
+                                    font.pixelSize: 13
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                            // the agent
+                            Rectangle {
+                                width: parent.width * 0.92
+                                height: aText.implicitHeight + 16
+                                radius: 14
+                                color: root.ui.fill
+
+                                TextEdit {
+                                    id: aText
+
+                                    x: 12
+                                    y: 8
+                                    width: parent.width - 24
+                                    readOnly: true
+                                    selectByMouse: true
+                                    wrapMode: TextEdit.Wrap
+                                    textFormat: turn.modelData.live ? TextEdit.PlainText : TextEdit.MarkdownText
+                                    text: turn.modelData.a || (turn.modelData.live ? `${App.askLabel} is thinking…` : "")
+                                    color: turn.modelData.a ? root.ui.text : root.ui.faint
+                                    font.pixelSize: 13
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        visible: !!App.askError
+                        width: lines.width
+                        text: App.askError
+                        color: root.ui.error
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            // what to do with the last answer
+            Flow {
+                Layout.fillWidth: true
+                visible: askCol.turns.length > 0 || App.asking
+                spacing: 8
+
+                Link {
+                    visible: App.asking
+                    text: "Stop"
+                    onClicked: App.cancelAsk()
+                }
+                Link {
+                    visible: !App.asking && askCol.turns.length > 0
+                    text: "Copy"
+                    onClicked: root.copy(askCol.turns[askCol.turns.length - 1].a)
+                }
+                Link {
+                    visible: !App.asking && App.canContinue
+                    text: "Continue in terminal"
+                    onClicked: App.continueInTerminal()
                 }
             }
 
@@ -1969,16 +2100,20 @@ Item {
                     Component.onCompleted: forceActiveFocus()
                     onTextChanged: root.draft = text
                     onAccepted: {
+                        if (!text.trim() || App.asking)
+                            return;
                         App.heard = "";
                         App.ask(text, root.files);
-                        root.forcedView = "result";
+                        text = "";
+                        root.files = [];
+                        root.forcedView = "ask";
                     }
                     Keys.onEscapePressed: root.collapse()
 
                     Text {
                         visible: !input.text
                         anchors.verticalCenter: parent.verticalCenter
-                        text: micIcon.hovered ? micIcon.hint : areaIcon.hovered ? areaIcon.hint : root.files.length ? "What about it?" : `Ask ${App.askLabel}…`
+                        text: micIcon.hovered ? micIcon.hint : areaIcon.hovered ? areaIcon.hint : root.files.length ? "What about it?" : App.chat?.turns?.length ? `Reply to ${App.askLabel}…` : `Ask ${App.askLabel}…`
                         color: root.ui.faint
                         font.pixelSize: 13
                     }
