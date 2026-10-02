@@ -325,7 +325,7 @@ Item {
                 eyeScale = 1;
                 p.noteLeft -= dt;
                 if (p.noteLeft <= 0) {
-                    burst("♪", Theme.thinking, 1);
+                    burst("♪", "#ffffff", 1);
                     p.noteLeft = 0.4;
                 }
             } else if (a === "stretch") {
@@ -522,7 +522,7 @@ Item {
                 text: glyph,
                 color: colour,
                 x: root.width / 2 + (sweat ? 30 * s : (Math.random() * 60 - 30) * s),
-                y: root.height / 2 - (sweat ? 10 : 22) * s,
+                y: root.height / 2 - (sweat ? 10 : 40) * s,
                 dx: sweat ? 4 * s : (Math.random() * 34 - 17) * s,
                 dy: sweat ? 26 * s : -(36 + Math.random() * 22) * s,
                 px: (glyph === "z" ? 13 : sweat ? 6 : glyph === "♪" ? 14 : 11) * s

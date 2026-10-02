@@ -1,6 +1,7 @@
 // Contact sheet of Emba's moods and moves: qs -p preview.qml
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import qs
 
 // A layer-shell panel rather than a window so the compositor never tiles it:
@@ -11,11 +12,15 @@ PanelWindow {
     margins.bottom: 20
     margins.right: 20
     exclusionMode: ExclusionMode.Ignore
+    // behind every window: recording never covers what you are doing
+    WlrLayershell.layer: WlrLayer.Background
     implicitWidth: 960
     implicitHeight: 340
-    color: "#262a36"
+    color: "#000000"
 
     Grid {
+        id: grid
+
         anchors.centerIn: parent
         columns: 5
         spacing: 14
@@ -57,10 +62,17 @@ PanelWindow {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: modelData.label
-                    color: "#8a8f98"
+                    color: "#9a9a9f"
                     font.pixelSize: 11
                 }
             }
         }
+    }
+
+    // EMBA_GRAB=file.png: save one picture and stay put (the caller ends us)
+    Timer {
+        running: Quickshell.env("EMBA_GRAB") !== null
+        interval: 2600
+        onTriggered: grid.grabToImage(r => r.saveToFile(Quickshell.env("EMBA_GRAB")))
     }
 }
