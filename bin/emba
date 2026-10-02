@@ -24,6 +24,7 @@ usage: emba [command]
   capture               just take the screenshot and print its path
   terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
+  voice-remove          delete them again and turn voice off
   plugins [new NAME]    list plugins, or start a new one in your config folder
 
   status [--json]       what is running and connected
@@ -46,6 +47,7 @@ import time
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
+VERSION = "0.2.0"
 APP = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(APP / "hook"))
 import hooks  # noqa: E402
@@ -274,7 +276,26 @@ def voice_install():
     py = venv_python()
     subprocess.run([py, "-m", "pip", "install", "--upgrade", "--quiet"] + VOICE_PACKAGES, check=True)
     subprocess.run([py, str(APP / "voice" / "voice.py"), "setup"], check=True)
-    print("voice is ready: turn it on in emba settings")
+    if running():  # installed means wanted: switch listening and talking back on
+        ipc("set", "voice", "true")
+        ipc("set", "voiceReply", "true")
+    print("voice is ready")
+
+
+def voice_remove():
+    """Undo voice-install: the packages, the downloaded models, the switches."""
+    subprocess.run([venv_python(), "-m", "pip", "uninstall", "--yes", "--quiet"] + VOICE_PACKAGES, capture_output=True)
+    if SYSTEM == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    elif SYSTEM == "Darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    shutil.rmtree(base / "emba" / "voice", ignore_errors=True)
+    if running():
+        ipc("set", "voice", "false")
+        ipc("set", "voiceReply", "false")
+    print("voice removed")
 
 
 def emba_config_dir():
@@ -390,6 +411,7 @@ def focus_window(address):
 
 def status():
     return {
+        "version": VERSION,
         "running": running(),
         "autostart": autostart_state(),
         "host": "quickshell" if use_quickshell() else "qt",
@@ -480,6 +502,8 @@ def main():
         plugins_cmd(rest)
     elif cmd == "voice-install":
         voice_install()
+    elif cmd == "voice-remove":
+        voice_remove()
     elif cmd == "capture":
         capture()
     elif cmd in ("look", "listen"):

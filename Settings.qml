@@ -22,8 +22,17 @@ Rectangle {
             opencode: "opencode",
             gemini: "Gemini CLI"
         })
+    // how to get each agent, for "Add an agent"
+    readonly property var agentInstall: ({
+            claude: "npm install -g @anthropic-ai/claude-code",
+            codex: "npm install -g @openai/codex",
+            opencode: "curl -fsSL https://opencode.ai/install | bash",
+            gemini: "npm install -g @google/gemini-cli"
+        })
     // only agents on this computer (or still hooked up) are worth a line
     readonly property var agents: Object.keys(agentNames).filter(a => st.agents?.[a]?.installed || st.agents?.[a]?.connected)
+    readonly property var missing: Object.keys(agentNames).filter(a => !agents.includes(a))
+    property bool adding: false
 
     Flickable {
         anchors.fill: parent
@@ -58,7 +67,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: "your coding buddy"
+                        text: win.st.version ? `your coding buddy · ${win.st.version}` : "your coding buddy"
                         color: Theme.dim
                         font.pixelSize: 12
                     }
@@ -76,6 +85,8 @@ Rectangle {
                         required property string modelData
 
                         text: win.agentNames[modelData]
+                        dot: App.agentColour(modelData)
+                        hint: !win.st.agents?.[modelData]?.connected ? "not watched yet" : ""
                         checked: !!win.st.agents?.[modelData]?.connected
                         enabled: !App.busy
                         onToggled: on => App.run([on ? "connect" : "disconnect", modelData])
@@ -83,12 +94,85 @@ Rectangle {
                 }
                 Text {
                     visible: win.agents.length === 0
-                    text: "No agents found. Install Claude Code, Codex, opencode or Gemini CLI."
+                    text: "No coding agent found on this computer yet."
                     color: Theme.dim
                     font.pixelSize: 12
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
+
+                // add another: how to install the ones that aren't here, and the hook for any other
+                Button {
+                    visible: !win.adding
+                    text: "Add an agent"
+                    onClicked: win.adding = true
+                }
+                ColumnLayout {
+                    visible: win.adding
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Repeater {
+                        model: win.missing
+
+                        ColumnLayout {
+                            id: miss
+
+                            required property string modelData
+
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            RowLayout {
+                                spacing: 8
+
+                                Rectangle { width: 8; height: 8; radius: 4; color: App.agentColour(miss.modelData) }
+                                Text {
+                                    text: win.agentNames[miss.modelData]
+                                    color: Theme.text
+                                    font.pixelSize: 13
+                                }
+                            }
+                            Command { text: win.agentInstall[miss.modelData] }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: win.missing.length ? "Run that in a terminal, then switch it on here." : "Every agent Emba knows is here."
+                        color: Theme.faint
+                        font.pixelSize: 11
+                        wrapMode: Text.Wrap
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "Any other agent"
+                            color: Theme.text
+                            font.pixelSize: 13
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "If it has Claude Code style hooks, point them at this, with your agent's name:"
+                            color: Theme.faint
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+                        Command { text: `${App.hookPath} --agent my-agent` }
+                    }
+                    Button {
+                        text: "Done"
+                        onClicked: {
+                            win.adding = false;
+                            App.refreshStatus();
+                        }
+                    }
+                }
+            }
+
+            // ---- more agent options ----
+            Card {
                 Labelled {
                     visible: (win.st.ask ?? []).length > 1
                     text: "Ask with"
@@ -240,50 +324,68 @@ Rectangle {
             Section { text: "Voice" }
 
             Card {
-                Toggle {
-                    visible: !!win.st.voice
-                    text: "Talk to Emba"
-                    hint: "stays on this computer"
-                    checked: !!App.cfg.voice
-                    onToggled: on => App.setCfg({ voice: on })
-                }
+                // not installed: one button, and what it costs
                 RowLayout {
                     visible: !win.st.voice
                     Layout.fillWidth: true
+                    spacing: 10
 
-                    Text {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: "Talk to Emba"
-                        color: Theme.text
-                        font.pixelSize: 13
+                        spacing: 1
+
+                        Text {
+                            text: "Talk to Emba, and hear it answer"
+                            color: Theme.text
+                            font.pixelSize: 13
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Free speech models, about 250 MB. Nothing you say leaves this computer."
+                            color: Theme.faint
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
                     }
                     Button {
-                        text: App.busy ? "Getting ready…" : "Set up"
+                        text: App.busy ? "Installing…" : "Install"
                         primary: true
                         onClicked: App.run(["voice-install"])
                     }
                 }
+
+                // installed: listening and talking back are separate switches
                 Toggle {
-                    visible: !!App.cfg.voice
+                    visible: !!win.st.voice
+                    text: "Talk to Emba"
+                    hint: "shake the mouse, or say “Hey Emba”"
+                    checked: !!App.cfg.voice
+                    onToggled: on => App.setCfg({ voice: on })
+                }
+                Toggle {
+                    visible: !!win.st.voice && !!App.cfg.voice
+                    indent: true
                     text: "Shake the mouse to talk"
                     checked: !!App.cfg.voiceShake
                     onToggled: on => App.setCfg({ voiceShake: on })
                 }
                 Toggle {
-                    visible: !!App.cfg.voice
+                    visible: !!win.st.voice && !!App.cfg.voice
+                    indent: true
                     text: "Listen for “Hey Emba”"
                     hint: "keeps the microphone on"
                     checked: !!App.cfg.voiceWake
                     onToggled: on => App.setCfg({ voiceWake: on })
                 }
                 Toggle {
-                    visible: !!App.cfg.voice
-                    text: "Answer out loud"
+                    visible: !!win.st.voice
+                    text: "Talk back"
+                    hint: "Emba reads its answers aloud"
                     checked: !!App.cfg.voiceReply
                     onToggled: on => App.setCfg({ voiceReply: on })
                 }
                 Labelled {
-                    visible: !!App.cfg.voice
+                    visible: !!win.st.voice && !!App.cfg.voiceReply
                     text: "Voice"
                     Segmented {
                         options: [["Amy", "en_US-amy-medium"], ["Ryan", "en_US-ryan-medium"], ["Alba", "en_GB-alba-medium"]]
@@ -293,6 +395,11 @@ Rectangle {
                             Qt.callLater(() => App.say("Hi! This is how I sound."));
                         }
                     }
+                }
+                Link {
+                    visible: !!win.st.voice
+                    text: App.busy ? "removing…" : "Remove voice and its models"
+                    onClicked: App.run(["voice-remove"])
                 }
             }
 
@@ -372,12 +479,12 @@ Rectangle {
                     text: "settings file"
                     onClicked: win.openPath(App.configPath)
                 }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: "not affiliated with Anthropic"
-                    color: Theme.faint
-                    font.pixelSize: 10
+                Link {
+                    Layout.leftMargin: 12
+                    text: "help and source"
+                    onClicked: Qt.openUrlExternally("https://github.com/teslaoruz/emba")
                 }
+                Item { Layout.fillWidth: true }
             }
         }
     }
@@ -399,6 +506,52 @@ Rectangle {
 
         HoverHandler { id: lh; cursorShape: Qt.PointingHandCursor }
         TapHandler { onTapped: link.clicked() }
+    }
+
+    // a shell command with a Copy button
+    component Command: Rectangle {
+        id: cmd
+
+        property string text
+
+        Layout.fillWidth: true
+        implicitHeight: 32
+        radius: 8
+        color: Qt.alpha(Theme.text, 0.06)
+
+        TextInput {
+            id: cmdText
+
+            anchors.left: parent.left
+            anchors.right: copyBtn.left
+            anchors.leftMargin: 10
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: cmd.text
+            readOnly: true
+            selectByMouse: true
+            clip: true
+            autoScroll: false  // show the start of a long command, not its end
+            color: Theme.text
+            font.family: Qt.platform.os === "windows" ? "Consolas" : Qt.platform.os === "osx" ? "Menlo" : "monospace"
+            font.pixelSize: 11
+        }
+        Link {
+            id: copyBtn
+
+            property bool done: false
+
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: done ? "copied" : "copy"
+            onClicked: {
+                cmdText.selectAll();
+                cmdText.copy();
+                cmdText.deselect();
+                done = true;
+            }
+        }
     }
 
     component Section: Text {
@@ -484,16 +637,32 @@ Rectangle {
         property string text
         property string hint
         property bool checked
+        // an agent's colour beside its name; indent for a switch that belongs to the one above
+        property color dot: "transparent"
+        property bool indent: false
         signal toggled(bool on)
 
         Layout.fillWidth: true
+        Layout.leftMargin: indent ? 16 : 0
         implicitHeight: Math.max(labels.implicitHeight, 22)
         opacity: enabled ? 1 : 0.5
 
+        Rectangle {
+            id: dotMark
+
+            visible: tg.dot.a > 0
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 8 : 0
+            height: 8
+            radius: 4
+            color: tg.dot
+        }
         Column {
             id: labels
 
-            anchors.left: parent.left
+            anchors.left: dotMark.right
+            anchors.leftMargin: dotMark.visible ? 8 : 0
             anchors.right: knob.left
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -503,7 +672,7 @@ Rectangle {
                 width: parent.width
                 text: tg.text
                 color: Theme.text
-                font.pixelSize: 12
+                font.pixelSize: 13
                 wrapMode: Text.Wrap
             }
             Text {
@@ -511,7 +680,7 @@ Rectangle {
                 visible: tg.hint !== ""
                 text: tg.hint
                 color: Theme.faint
-                font.pixelSize: 10
+                font.pixelSize: 11
                 wrapMode: Text.Wrap
             }
         }

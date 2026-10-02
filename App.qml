@@ -657,6 +657,8 @@ Singleton {
     // All local (voice/voice.py): Whisper hears, Piper speaks. Voice can
     // point at Allow or Deny, but only a click ever answers a permission.
     readonly property string voiceScript: `${Quickshell.shellDir}/voice/voice.py`
+    // for agents Emba doesn't know: their hooks can call this
+    readonly property string hookPath: `${Quickshell.shellDir}/hook/emba-hook`
     property string voiceState: ""    // listening thinking speaking ""
     property real voiceLevel: 0       // mic level while listening, loudness while speaking
     property string heard: ""
@@ -681,7 +683,8 @@ Singleton {
     }
 
     function say(text) {
-        if (!cfg.voice || !cfg.voiceReply || !text.trim())
+        // talking back is its own switch: it works with or without listening
+        if (!status.voice || !cfg.voiceReply || !text.trim())
             return;
         sayProc.running = false;
         sayProc.command = [status.python || python, voiceScript, "say", text.slice(0, 1200), "--voice", cfg.voiceName];
