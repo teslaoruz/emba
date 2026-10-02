@@ -51,6 +51,7 @@ Item {
     }
 
     readonly property var sessions: App.sessions
+    readonly property bool mixedAgents: new Set(sessions.map(x => x.agent ?? "claude")).size > 1
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
 
@@ -1116,15 +1117,30 @@ Item {
                 TapHandler { onTapped: root.expand("limit") }
             }
 
+            // every session of every agent; past four it scrolls
+            Flickable {
+                Layout.fillWidth: true
+                implicitHeight: Math.min(rows.implicitHeight, 3 * 44 + 22)  // half a row peeks out: there is more
+                contentHeight: rows.implicitHeight
+                clip: contentHeight > height
+                interactive: contentHeight > height
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: rows
+
+                    width: parent.width
+                    spacing: 4
+
             Repeater {
-                model: root.sessions.slice(0, 4)
+                model: root.sessions
 
                 Rectangle {
                     id: srow
 
                     required property var modelData
 
-                    Layout.fillWidth: true
+                    width: rows.width
                     implicitHeight: 40
                     radius: 12
                     color: Qt.alpha(Theme.text, rh.hovered ? 0.07 : 0.035)
@@ -1145,7 +1161,7 @@ Item {
                     Column {
                         x: 27
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - 37
+                        width: parent.width - (root.mixedAgents ? 90 : 37)
 
                         Text {
                             width: parent.width
@@ -1161,6 +1177,29 @@ Item {
                             font.pixelSize: 11
                         }
                     }
+
+                    // which agent: shown once more than one kind is running
+                    Rectangle {
+                        visible: root.mixedAgents
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        y: 7
+                        width: badge.implicitWidth + 12
+                        height: 16
+                        radius: 8
+                        color: Qt.alpha(Theme.text, 0.08)
+
+                        Text {
+                            id: badge
+
+                            anchors.centerIn: parent
+                            text: srow.modelData.agent ?? "claude"
+                            color: Theme.dim
+                            font.pixelSize: 10
+                        }
+                    }
+                }
+            }
                 }
             }
 

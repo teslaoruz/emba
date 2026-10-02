@@ -4,7 +4,8 @@
     python3 dev/fake.py ask            a permission request; prints emba's answer
     python3 dev/fake.py done           first session finishes
     python3 dev/fake.py limit 85       usage at 85 %
-    python3 dev/fake.py end            both sessions end
+    python3 dev/fake.py many           six sessions across four agents
+    python3 dev/fake.py end            all sessions end
 """
 import json
 import os
@@ -42,6 +43,13 @@ elif cmd == "limit":
     pct = int(sys.argv[2]) if len(sys.argv) > 2 else 85
     send({"ev": "Limits", "model": "Opus", "five_hour": {"used_percentage": pct, "resets_at": 1790900000},
           "seven_day": {"used_percentage": 41, "resets_at": 1791300000}})
+elif cmd == "many":
+    for i, (agent, cwd, work) in enumerate([("claude", "invoices", "Invoice.swift"), ("codex", "api", "server.py"),
+                                            ("codex", "web", "App.tsx"), ("gemini", "docs", "intro.md"),
+                                            ("opencode", "cli", "main.go"), ("claude", "notes", "week.md")]):
+        m = {"sid": f"fake-m{i}", "agent": agent, "cwd": f"/home/you/code/{cwd}", "pid": 1}
+        send({**m, "ev": "SessionStart"})
+        send({**m, "ev": "PreToolUse", "tool": "Edit", "target": work})
 elif cmd == "end":
-    send({**A, "ev": "SessionEnd"})
-    send({**B, "ev": "SessionEnd"})
+    for sid in ["fake-a", "fake-b"] + [f"fake-m{i}" for i in range(6)]:
+        send({"sid": sid, "ev": "SessionEnd"})
