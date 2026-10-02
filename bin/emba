@@ -448,8 +448,9 @@ def main():
         time.sleep(0.6)
         start()
     elif cmd == "run":
-        c = host_command()
-        sys.exit(subprocess.call(c))
+        rc = subprocess.call(host_command())
+        # `emba quit` ends Quickshell with SIGTERM: a clean exit, so a service manager does not restart it
+        sys.exit(0 if rc == -15 else rc)
     elif cmd in ("settings", "toggle", "open", "close", "ask", "allow", "deny", "set", "state", "say", "care", "feed", "play", "nap", "pet", "followup", "continue", "snapshot"):
         if not running():
             start()
