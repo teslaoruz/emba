@@ -260,6 +260,25 @@ Item {
         interval: 600
         onTriggered: root.peeking = false
     }
+    // Hello on start: Emba pops out of its corner, waves and says hi, then tucks away
+    Timer {
+        running: true
+        interval: 1400
+        onTriggered: {
+            if (root.open || root.mode !== "hidden" && root.mode !== "dots")
+                return;
+            root.peeking = true;
+            panda.wave();
+            greetEnd.start();
+        }
+    }
+    Timer {
+        id: greetEnd
+
+        interval: 2600
+        onTriggered: if (!hover.hovered && !root.open)
+            root.peeking = false
+    }
     Timer {
         id: leaveTimer
 
