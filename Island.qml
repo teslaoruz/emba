@@ -144,8 +144,21 @@ Item {
         source: "Sounds.qml"  // no audio module on this system: it stays unloaded, Emba stays quiet
     }
     function sfx(name) {
-        if (App.cfg.sounds !== false && sounds.item)
+        if (!!App.cfg.sounds && sounds.item)
             sounds.item.play(name, App.cfg.soundVolume ?? 0.5);
+    }
+    Connections {
+        target: Pet
+        function onNappingChanged() {
+            root.sfx(Pet.napping ? "yawn" : "wake");
+        }
+    }
+    Connections {
+        target: App
+        function onVoiceStateChanged() {
+            if (App.voiceState === "listening")
+                root.sfx("listen");
+        }
     }
     property string lastMode: "hidden"
     onModeChanged: {
@@ -628,9 +641,11 @@ Item {
                     if (!Pet.napping)
                         Pet.nap();
                 }
-                onPetted: {
-                    root.sfx("love");
-                    Pet.pet();
+                onPetted: Pet.pet()  // the love face plays its sound
+                // Emba's own moves and faces only make a sound while you're looking at it
+                onSound: name => {
+                    if (root.mode === "expanded" || root.mode === "peek")
+                        root.sfx(name);
                 }
             }
 
@@ -717,10 +732,12 @@ Item {
                 target: Pet
 
                 function onFed() {
+                    root.sfx("eat");
                     panda.emote("surprised", 0.6);
                     feedAnim.restart();
                 }
                 function onPlayed() {
+                    root.sfx("play");
                     playAnim.restart();
                 }
                 function onRefused(why) {

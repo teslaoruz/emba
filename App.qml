@@ -22,7 +22,7 @@ Singleton {
             color: "#e2683c",        // Emba's fur
             hideWhenIdle: true,      // only a small nub while nothing runs
             danceToMusic: true,      // pop out and dance while music plays
-            sounds: true,            // little sound effects
+            sounds: false,           // little sound effects (off until the set is chosen)
             soundVolume: 0.5,
             autoOpenOnPermission: true,
             celebrate: true,         // pop open when a session finishes

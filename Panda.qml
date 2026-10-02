@@ -33,6 +33,8 @@ Item {
     signal petted
     signal doubleClicked
     signal held
+    // Emba made a sound-worthy move or face: the island decides whether to play it
+    signal sound(string name)
 
     implicitWidth: 96
     implicitHeight: 96
@@ -83,11 +85,18 @@ Item {
         p.shakeLeft = 0.6;
     }
     function emote(name, seconds) {
+        if (name !== p.emote || p.emoteLeft <= 0) {
+            const s = ({ annoyed: "annoyed", dizzy: "dizzy", love: "love" })[name];
+            if (s)
+                sound(s);
+        }
         p.emote = name;
         p.emoteLeft = seconds;
     }
     // a short routine: dance spin hop stretch wave lookaround tailchase sneeze
     function act(name) {
+        if (["hop", "spin", "sneeze"].includes(name))
+            sound(name);
         p.act = name;
         p.actT = 0;
         p.actLen = ({
