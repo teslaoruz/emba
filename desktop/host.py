@@ -262,8 +262,11 @@ class Process(QObject):
     def _done(self, p, code, status):
         if self._proc is not p:
             return
-        self._feed(self._stdout, p.readAllStandardOutput())
-        self._feed(self._stderr, p.readAllStandardError())
+        try:
+            self._feed(self._stdout, p.readAllStandardOutput())
+            self._feed(self._stderr, p.readAllStandardError())
+        except RuntimeError:  # the app is shutting down and Qt already freed the process
+            return
         for parser in (self._stdout, self._stderr):
             if parser is not None:
                 parser.finish()

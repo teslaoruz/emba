@@ -339,9 +339,11 @@ Item {
         if (mode === "compact")
             return sideways ? Qt.size(44, 52 + Math.min(sessions.length, 6) * 10 + 4) : Qt.size(Math.min(300, 58 + compactLabel.implicitWidth + 14 + Math.min(sessions.length, 6) * 10 + 8), 44);
         // a conversation may grow taller than the other views
-        return Qt.size(460, Math.max(132, Math.min(view === "ask" && App.chat?.turns?.length ? 440 : 360, (content.item?.implicitHeight ?? 100) + 30)));
+        return Qt.size(460, Math.max(132, Math.min(view === "ask" && App.chat?.turns?.length ? 460 : 380, (content.item?.implicitHeight ?? 100) + 30 + (tabbed ? 40 : 0))));
     }
     readonly property bool opening: mode === "expanded" || mode === "peek"
+    // the two main screens share a tab bar: your sessions, and the chat
+    readonly property bool tabbed: ["overview", "empty", "ask", "result"].includes(view)
     // How much window the island needs right now (unscaled): all of it while
     // it changes size, just its own shape plus room for the flared corners
     // once it has settled. A smaller window is a smaller picture to redraw
@@ -860,8 +862,8 @@ Item {
                 id: content
 
                 x: 98
-                y: 18
-                width: shape.width - 98 - (cornerButton.visible ? 52 : 22)
+                y: root.tabbed ? 58 : 18
+                width: shape.width - 98 - (cornerButton.visible && !root.tabbed ? 52 : 22)
                 active: root.mode === "expanded"
                 // in once the island is nearly open (never squeezed into a small one), out at once
                 opacity: root.mode === "expanded" && shape.height >= Math.min(root.target.height, 132) * 0.85 ? 1 : 0
@@ -894,13 +896,53 @@ Item {
                 }
             }
 
+            // Sessions | Chat
+            Row {
+                objectName: "tabs"
+                x: 98
+                y: 16
+                spacing: 4
+                visible: root.tabbed && root.mode === "expanded"
+                opacity: content.opacity
+
+                Repeater {
+                    model: [["Sessions", false], ["Chat", true]]
+
+                    Rectangle {
+                        id: tab
+
+                        required property var modelData
+                        readonly property bool on: (root.view === "ask" || root.view === "result") === modelData[1]
+
+                        width: tabText.implicitWidth + 26
+                        height: 30
+                        radius: 15
+                        color: on ? root.ui.fillHover : th.hovered ? root.ui.fill : "transparent"
+
+                        Behavior on color { ColorAnimation { duration: 120 } }
+
+                        Text {
+                            id: tabText
+
+                            anchors.centerIn: parent
+                            text: tab.modelData[0] + (tab.modelData[1] || !root.sessions.length ? "" : `  ${root.sessions.length}`)
+                            color: tab.on ? root.ui.text : root.ui.dim
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+                        HoverHandler { id: th; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: root.expand(tab.modelData[1] ? "ask" : "") }
+                    }
+                }
+            }
+
             // settings on the main screens; a way back to them from everywhere else
             IconButton {
                 id: cornerButton
 
                 objectName: "cornerButton"
 
-                readonly property bool home: ["overview", "empty"].includes(root.view)
+                readonly property bool home: root.tabbed
 
                 visible: root.mode === "expanded" && !["approval", "drop"].includes(root.view)
                 opacity: content.opacity

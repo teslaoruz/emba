@@ -1,5 +1,5 @@
-"""Clicking the overview's "Ask…" field opens the ask box, and the back button
-returns to the overview (offscreen, no desktop input).
+"""Clicking the overview's "Ask…" field opens the ask box, and the Sessions
+tab returns to the sessions (offscreen, no desktop input).
     QT_QPA_PLATFORM=offscreen python tests/ui_click.py"""
 import os
 import sys
@@ -60,7 +60,8 @@ def step2():
 def step3():
     print("view after:", island.property("view"))
     results.append(island.property("view") == "ask")
-    back = win.findChild(QQuickItem, "cornerButton")
+    tabs = win.findChild(QQuickItem, "tabs")
+    back = tabs.childItems()[0] if tabs else None  # Sessions
     if back:
         c = back.mapToScene(QPointF(back.width() / 2, back.height() / 2))
         click(c.x(), c.y())
