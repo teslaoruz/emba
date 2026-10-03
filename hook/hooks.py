@@ -5,7 +5,7 @@
     python3 hook/hooks.py uninstall [AGENT ...] [--yes]
     python3 hook/hooks.py status    prints {"claude": {...}, "codex": {...}, ...}
 
-AGENT is claude, codex, gemini or opencode; default: every one installed.
+AGENT is claude, codex, gemini, agy (Antigravity) or opencode; default: every one installed.
 Only Emba's own entries are touched. Each file gets a dated backup and the
 diff is shown before anything is written.
 """
@@ -114,11 +114,28 @@ def gemini_install(cfg, _):
               timeout=5000)
 
 
+# ---- Antigravity (agy): ~/.gemini/config/hooks.json, one named block per hook ----
+# Watched only: agy decides its own permissions (an empty reply to PreToolUse is
+# not documented the same everywhere), so its approvals stay in its terminal.
+
+def agy_install(cfg, _):
+    def h(ev):
+        return {"type": "command", "command": f"{hook_command('agy')} --event {ev}", "timeout": 10}
+    cfg["emba"] = {"PreInvocation": [h("PreInvocation")],
+                   "PostToolUse": [{"matcher": "*", "hooks": [h("PostToolUse")]}],
+                   "Stop": [h("Stop")]}
+
+
+def agy_uninstall(cfg):
+    cfg.pop("emba", None)
+
+
 AGENTS = {
     "claude": dict(file=claude_file, install=claude_install, uninstall=claude_uninstall),
     "codex": dict(file=lambda: Path(os.environ.get("CODEX_HOME") or HOME / ".codex") / "hooks.json",
                   install=codex_install, uninstall=strip_hooks),
     "gemini": dict(file=lambda: HOME / ".gemini" / "settings.json", install=gemini_install, uninstall=strip_hooks),
+    "agy": dict(file=lambda: HOME / ".gemini" / "config" / "hooks.json", install=agy_install, uninstall=agy_uninstall),
 }
 EVERY = list(AGENTS) + ["opencode"]
 
@@ -140,7 +157,7 @@ def status():
             cfg = json.loads(a["file"]().read_text())
         except (OSError, ValueError):
             cfg = {}
-        out[name] = {"installed": installed(name), "connected": has_hooks(cfg)}
+        out[name] = {"installed": installed(name), "connected": "emba" in cfg if name == "agy" else has_hooks(cfg)}
         if name == "claude":
             out[name]["statusline"] = "emba-hook" in cfg.get("statusLine", {}).get("command", "")
     out["opencode"] = {"installed": installed("opencode"), "connected": opencode_plugin().exists()}
@@ -211,7 +228,7 @@ def main():
     elif "all" in names:
         names = EVERY
     if not names:
-        sys.exit("no supported agent found (claude, codex, gemini, opencode)")
+        sys.exit("no supported agent found (claude, codex, gemini, agy, opencode)")
     for n in names:
         apply(n, args[0], "--statusline" in args, "--yes" in args)
     if args[0] == "install":

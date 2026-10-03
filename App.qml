@@ -158,7 +158,8 @@ Singleton {
             claude: "#f2c38f",   // sand: Emba's own fur is already orange
             codex: "#3ecf8e",
             gemini: "#5b9cf6",
-            opencode: "#c084fc"
+            opencode: "#c084fc",
+            agy: "#f59e0b"
         })
     function agentColour(agent) {
         return agentColours[agent ?? "claude"] ?? "#9ca3af";
@@ -168,7 +169,8 @@ Singleton {
             claude: { outfit: "glasses", fur: 1.0 },
             codex: { outfit: "headphones", fur: 0.86 },
             gemini: { outfit: "sprout", fur: 1.12 },
-            opencode: { outfit: "cap", fur: 0.76 }
+            opencode: { outfit: "cap", fur: 0.76 },
+            agy: { outfit: "", fur: 0.94 }
         })
     function agentOutfit(agent) {
         return agentLooks[agent ?? "claude"]?.outfit ?? "";

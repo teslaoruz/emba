@@ -113,6 +113,7 @@ On Wayland desktops with layer-shell (Hyprland, Sway, niri, KDE…) Emba runs on
 | Codex | ✓ | ✓ | in its terminal | ✓ | ✓ |
 | opencode (1.x and 2.x) | ✓ | ✓ (first 30 s, then the terminal) | in its terminal | | ✓ |
 | Gemini CLI | ✓ | points you to the terminal | in its terminal | | ✓ |
+| Antigravity (agy) | ✓ | in its terminal | in its terminal | | |
 | Ollama | | | | | ✓ |
 
 Connect any or all of them in **Settings → Agents**, or with `emba connect`. **Add an agent** in

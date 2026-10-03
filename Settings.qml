@@ -20,14 +20,16 @@ Rectangle {
             claude: "Claude Code",
             codex: "Codex",
             opencode: "opencode",
-            gemini: "Gemini CLI"
+            gemini: "Gemini CLI",
+            agy: "Antigravity"
         })
     // how to get each agent, for "Add an agent"
     readonly property var agentInstall: ({
             claude: "npm install -g @anthropic-ai/claude-code",
             codex: "npm install -g @openai/codex",
             opencode: "curl -fsSL https://opencode.ai/install | bash",
-            gemini: "npm install -g @google/gemini-cli"
+            gemini: "npm install -g @google/gemini-cli",
+            agy: "see antigravity.google to install the agy CLI"
         })
     // only agents on this computer (or still hooked up) are worth a line
     readonly property var agents: Object.keys(agentNames).filter(a => st.agents?.[a]?.installed || st.agents?.[a]?.connected)

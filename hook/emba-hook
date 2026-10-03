@@ -94,7 +94,7 @@ def send(msg, wait=False):
 
 def target(tool, args):
     """The thing a tool call acts on, short enough for a one-line ticker."""
-    if tool == "Bash":
+    if tool == "Bash" or (args.get("command") and isinstance(args.get("command"), str)):
         return args.get("command", "")
     for key in ("file_path", "notebook_path", "path", "url", "pattern", "query", "description", "prompt"):
         v = args.get(key)
@@ -217,6 +217,14 @@ def main():
     except ValueError:
         return
     ev = p.get("hook_event_name", "")
+    if agent == "agy":  # Antigravity: the event comes on the command line, the rest in its own names
+        ev = {"PreInvocation": "UserPromptSubmit", "PostToolUse": "PreToolUse", "Stop": "Stop"}.get(
+            argv[argv.index("--event") + 1] if "--event" in argv[:-1] else "", "")
+        call = p.get("toolCall") or {}
+        p = {**p, "session_id": p.get("conversationId", ""), "cwd": (p.get("workspacePaths") or [""])[0],
+             "tool_name": call.get("name", ""), "tool_input": call.get("args") or {}}
+        if not ev:
+            return
     if agent == "gemini":
         if ev == "Notification" and p.get("notification_type") == "ToolPermission":
             ev = "Attention"  # Gemini cannot be answered from a hook: point at the terminal
