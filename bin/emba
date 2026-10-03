@@ -22,6 +22,7 @@ usage: emba [command]
   look                  drag a rectangle on screen and ask about it
   listen                talk to Emba (voice must be on in settings)
   capture               just take the screenshot and print its path
+  email FILE...         a new email with these files attached
   terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
   voice-remove          delete them again and turn voice off
@@ -256,6 +257,23 @@ def window_boxes():
                        for c in run("clients") if c.get("mapped") and not c.get("hidden") and c["workspace"]["id"] in shown)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return ""
+
+
+def email(files):
+    """A new email in the user's mail app with these files attached. No shell involved."""
+    files = [str(Path(f).resolve()) for f in files if Path(f).is_file()]
+    if not files:
+        sys.exit("no such file")
+    if SYSTEM == "Darwin":
+        script = ['tell application "Mail"', "set m to make new outgoing message with properties {visible:true}",
+                  "repeat with f in argv", "tell m to make new attachment with properties {file name:(POSIX file f)} at after the last paragraph",
+                  "end repeat", "activate", "end tell"]
+        subprocess.Popen(["osascript", "-e", "on run argv"] + [x for line in script for x in ("-e", line)] + ["-e", "end run"] + files)
+    elif shutil.which("xdg-email"):
+        subprocess.Popen(["xdg-email"] + [x for f in files for x in ("--attach", f)], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        sys.exit("no mail app found; attach it by hand: " + " ".join(files))
 
 
 def capture():
@@ -518,6 +536,8 @@ def main():
         voice_install()
     elif cmd == "voice-remove":
         voice_remove()
+    elif cmd == "email" and rest:
+        email(rest)
     elif cmd == "capture":
         capture()
     elif cmd in ("look", "listen"):

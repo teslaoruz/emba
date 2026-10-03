@@ -2319,12 +2319,24 @@ ToolIcon {
                 title: root.files.length === 1 ? root.files[0].split(/[\\/]/).pop() : `${root.files.length} files`
             }
             AskField {}
+            Row {
+                spacing: 8
+
+                Link {
+                    visible: Qt.platform.os !== "windows"
+                    text: "Email it"
+                    onClicked: {
+                        App.run(["email"].concat(root.files));
+                        root.collapse();
+                    }
+                }
             Link {
                 text: "Copy path"
                 onClicked: {
                     root.copy(root.files.join(" "));
                     root.collapse();
                 }
+            }
             }
         }
     }
