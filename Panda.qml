@@ -30,6 +30,8 @@ Item {
     property bool music: false
     // a bandana in this colour (transparent: none): which agent a little Emba stands for
     property color scarf: "transparent"
+    // one accessory that tells the agents' Embas apart: glasses, headphones, sprout, cap (or none)
+    property string outfit: ""
 
     signal clicked
     signal petted
@@ -816,8 +818,40 @@ Item {
                 }
             }
 
+            // headphones: the band goes behind the head, the cups over the ears' sides
+            VPath {
+                visible: root.outfit === "headphones"
+                d: "M -31 -14 Q -31 -44 0 -44 Q 31 -44 31 -14"
+                stroke: "#2b2d36"
+                line: 4.5
+            }
+
             // the head: one wide flat block, no shading
             Rectangle { x: -32; y: -32; width: 64; height: 48; radius: 16; color: root.fur }
+
+            // accessories that sit on the head
+            Item {
+                visible: root.outfit === "headphones"
+
+                Rectangle { x: -38; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
+                Rectangle { x: 29; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
+                Rectangle { x: -36.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
+                Rectangle { x: 33.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
+            }
+            Item {
+                visible: root.outfit === "sprout"
+
+                VPath { d: "M 0 -31 Q 1 -38 -1 -44"; stroke: "#3f8f4e"; line: 2.4 }
+                VPath { d: "M -1 -42 Q -12 -48 -13 -38 Q -6 -36 -1 -42 Z"; fill: "#57b36a" }
+                VPath { d: "M -0.5 -40 Q 9 -49 13 -41 Q 6 -36 -0.5 -40 Z"; fill: "#6cc97e" }
+            }
+            Item {
+                visible: root.outfit === "cap"
+
+                VPath { d: "M -27 -26 Q -26 -45 0 -45 Q 26 -45 27 -26 Z"; fill: root.scarf.a > 0 ? root.scarf : "#c084fc" }
+                VPath { d: "M 12 -30 Q 30 -33 38 -27 Q 30 -24 12 -26 Z"; fill: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
+                Rectangle { x: -2; y: -47; width: 4; height: 3; radius: 1.5; color: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
+            }
 
             // the mailbox slot on top of the head: widens first, then opens up
             Rectangle {
@@ -931,6 +965,15 @@ Item {
                             rotation: p.t * 9 * eye.modelData * 180 / Math.PI
                         }
                     }
+                }
+
+                // round glasses
+                Item {
+                    visible: root.outfit === "glasses"
+
+                    Ell { cx: -10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
+                    Ell { cx: 10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
+                    VPath { d: "M -16.2 -8 A 6.2 6.2 0 1 0 -3.8 -8 A 6.2 6.2 0 1 0 -16.2 -8 M 3.8 -8 A 6.2 6.2 0 1 0 16.2 -8 A 6.2 6.2 0 1 0 3.8 -8 M -3.8 -9 Q 0 -11 3.8 -9"; stroke: "#2b1a14"; line: 1.6 }
                 }
 
                 // nose, and a small mouth (or an open one)

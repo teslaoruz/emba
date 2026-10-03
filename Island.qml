@@ -1485,7 +1485,8 @@ Item {
                         lively: false
                         mood: srow.modelData.state === "waiting" ? "waiting" : "idle"
                         scarf: App.agentColour(srow.modelData.agent)
-                        bodyColor: App.cfg.color
+                        outfit: App.agentOutfit(srow.modelData.agent)
+                        bodyColor: App.agentFur(srow.modelData.agent)
                     }
 
                     Column {

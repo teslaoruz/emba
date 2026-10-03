@@ -158,6 +158,21 @@ Singleton {
     function agentColour(agent) {
         return agentColours[agent ?? "claude"] ?? "#9ca3af";
     }
+    // each agent's little Emba looks different: its own accessory and a fur shade of its own
+    readonly property var agentLooks: ({
+            claude: { outfit: "glasses", fur: 1.0 },
+            codex: { outfit: "headphones", fur: 0.86 },
+            gemini: { outfit: "sprout", fur: 1.12 },
+            opencode: { outfit: "cap", fur: 0.76 }
+        })
+    function agentOutfit(agent) {
+        return agentLooks[agent ?? "claude"]?.outfit ?? "";
+    }
+    function agentFur(agent) {
+        const k = agentLooks[agent ?? "claude"]?.fur ?? 1;
+        const c = Qt.color(cfg.color || "#e2683c");
+        return Qt.rgba(Math.min(1, c.r * k), Math.min(1, c.g * k), Math.min(1, c.b * k), 1);
+    }
 
     readonly property var stateColours: ({
             idle: Theme.dim,
