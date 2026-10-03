@@ -1,37 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-52 -46 104 104" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 2 92 92" width="512" height="512">
   <title>Emba</title>
-  <defs>
-    <clipPath id="body"><rect x="-34" y="-24" width="68" height="56" rx="24"/></clipPath>
-  </defs>
   <!-- tail -->
-  <g>
-    <circle cx="40" cy="4" r="6.5" fill="#9a4729"/>
-    <circle cx="37.4" cy="7.2" r="6.8" fill="#e2683c"/>
-    <circle cx="34.8" cy="10.4" r="7.1" fill="#9a4729"/>
-    <circle cx="32.2" cy="13.6" r="7.4" fill="#e2683c"/>
-    <circle cx="29.6" cy="16.8" r="7.7" fill="#9a4729"/>
-    <circle cx="27" cy="20" r="8" fill="#e2683c"/>
-  </g>
+  <path d="M66 80 C84 80 90 66 84 58" stroke="#e2683c" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M84 66 l7 -2 M80 75 l6 3" stroke="#5f2b19" stroke-width="5" stroke-linecap="round"/>
+  <!-- body and feet -->
+  <rect x="34" y="58" width="32" height="30" rx="8" fill="#5f2b19"/>
+  <rect x="31" y="84" width="12" height="6" rx="3" fill="#3a2420"/>
+  <rect x="57" y="84" width="12" height="6" rx="3" fill="#3a2420"/>
   <!-- ears -->
-  <circle cx="-22" cy="-19" r="9" fill="#e2683c"/>
-  <circle cx="22" cy="-19" r="9" fill="#e2683c"/>
-  <circle cx="-22.6" cy="-19.8" r="4.8" fill="#3a2420"/>
-  <circle cx="22.6" cy="-19.8" r="4.8" fill="#3a2420"/>
-  <!-- body -->
-  <rect x="-34" y="-24" width="68" height="56" rx="24" fill="#e2683c"/>
-  <ellipse cx="-6" cy="-20" rx="30" ry="10" fill="#fff" fill-opacity=".13" clip-path="url(#body)"/>
-  <!-- brows -->
-  <ellipse cx="-10" cy="-8" rx="3.6" ry="2.6" fill="#fff4e8"/>
-  <ellipse cx="10" cy="-8" rx="3.6" ry="2.6" fill="#fff4e8"/>
-  <!-- blush -->
-  <ellipse cx="-19" cy="11" rx="4.5" ry="2.8" fill="#ff96aa" fill-opacity=".55"/>
-  <ellipse cx="19" cy="11" rx="4.5" ry="2.8" fill="#ff96aa" fill-opacity=".55"/>
-  <!-- eyes -->
-  <ellipse cx="-10" cy="3" rx="3.3" ry="4.8" fill="#1e1a24"/>
-  <ellipse cx="10" cy="3" rx="3.3" ry="4.8" fill="#1e1a24"/>
-  <ellipse cx="-9" cy="0.8" rx="1.1" ry="1.3" fill="#fff"/>
-  <ellipse cx="11" cy="0.8" rx="1.1" ry="1.3" fill="#fff"/>
-  <!-- paws -->
-  <circle cx="-41" cy="18" r="5" fill="#b05130"/>
-  <circle cx="41" cy="18" r="5" fill="#b05130"/>
+  <path d="M18 28 C14 10 28 4 40 20 Z M82 28 C86 10 72 4 60 20 Z" fill="#fff4e8"/>
+  <path d="M22 26 C20 14 28 10 36 20 Z M78 26 C80 14 72 10 64 20 Z" fill="#3a2420"/>
+  <!-- head -->
+  <rect x="18" y="18" width="64" height="48" rx="16" fill="#e2683c"/>
+  <!-- mask: cheeks, brows, muzzle -->
+  <ellipse cx="31" cy="49" rx="8" ry="6" fill="#fff4e8"/>
+  <ellipse cx="69" cy="49" rx="8" ry="6" fill="#fff4e8"/>
+  <path d="M35 35 Q40 31 45 35 M55 35 Q60 31 65 35" stroke="#fff4e8" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+  <ellipse cx="50" cy="52" rx="9" ry="6" fill="#fff4e8"/>
+  <!-- eyes, nose, mouth -->
+  <circle cx="40" cy="42" r="3.4" fill="#1e1512"/>
+  <circle cx="60" cy="42" r="3.4" fill="#1e1512"/>
+  <circle cx="41" cy="40.7" r="0.95" fill="#ffffff"/>
+  <circle cx="61" cy="40.7" r="0.95" fill="#ffffff"/>
+  <path d="M47 49 L53 49 L50 52.2 Z" fill="#3a2420"/>
+  <path d="M47.4 53.6 Q48.7 55 50 53.6 Q51.3 55 52.6 53.6" stroke="#3a2420" stroke-width="1.1" fill="none" stroke-linecap="round"/>
 </svg>
