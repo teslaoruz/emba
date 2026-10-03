@@ -475,7 +475,10 @@ Rectangle {
                         ["resend", "Resend", "recent emails and bounces", "resend.com/api-keys"],
                         ["calcom", "Cal.com", "your next booking", "app.cal.com/settings/developer/api-keys"],
                         ["notion", "Notion", "the page you edited last", "notion.so/my-integrations"],
-                        ["n8n", "n8n", "failed workflow runs", "your n8n → Settings → API"]
+                        ["n8n", "n8n", "failed workflow runs", "your n8n → Settings → API"],
+                        ["anthropic", "Claude API", "chat with Claude on your own key", "console.anthropic.com/settings/keys"],
+                        ["openai", "OpenAI", "chat with OpenAI models on your own key", "platform.openai.com/api-keys"],
+                        ["google", "Google AI", "chat with Gemini on your own key", "aistudio.google.com/apikey"]
                     ]
 
                     ColumnLayout {

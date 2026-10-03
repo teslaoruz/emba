@@ -44,6 +44,8 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
   account: no API keys. Pick who answers: Claude, Codex, opencode, Gemini, or a local Ollama model.
   Follow up in place, or continue the conversation in the agent's own terminal (the terminal you
   used last, or `$TERMINAL`).
+  Or chat straight with Claude, OpenAI or Gemini on your own API key (Settings → Integrations);
+  pick the model from the list your account offers.
 - **Show it your screen.** Drag a rectangle anywhere and ask about what's in it.
 - **Feed it files.** Drop a file on Emba to ask about it.
 - **Talk to it** (optional). Shake the mouse or say "Hey Emba", ask out loud, hear the answer.

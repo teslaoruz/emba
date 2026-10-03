@@ -2009,7 +2009,7 @@ Item {
                 spacing: 4
 
                 Repeater {
-                    model: (App.status.ask ?? []).length ? App.status.ask : [App.askTool]
+                    model: App.chatTools.length ? App.chatTools : [App.askTool]
 
                     Rectangle {
                         required property string modelData
@@ -2026,7 +2026,7 @@ Item {
                             id: chip
 
                             anchors.centerIn: parent
-                            text: parent.modelData
+                            text: App.toolLabel(parent.modelData)
                             color: parent.on ? root.ui.accentInk : root.ui.dim
                             font.pixelSize: 12
                             font.weight: parent.on ? Font.DemiBold : Font.Normal

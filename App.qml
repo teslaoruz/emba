@@ -132,7 +132,10 @@ Singleton {
         }
     }
 
-    Component.onCompleted: refreshStatus()
+    Component.onCompleted: {
+        refreshStatus();
+        refreshKeys();
+    }
 
     // -------------------------------------------------------------- sessions
     // sid -> { sid, name, cwd, state, ts, pid, win, ticker: [...], text }
@@ -544,6 +547,9 @@ Singleton {
     property var askCode: null
 
     readonly property var askTools: ["claude", "gemini", "opencode", "codex", "ollama"]
+    // chat straight with a provider on your own API key (Settings → Integrations)
+    readonly property var apiTools: ["anthropic", "openai", "google"]
+    readonly property var chatTools: (status.ask ?? []).concat(apiTools.filter(t => keysSet[t]))
     readonly property string askTool: {
         const want = cfg.askWith ?? "auto";
         const have = status.ask ?? [];
@@ -551,12 +557,21 @@ Singleton {
             return want;
         return askTools.find(t => have.includes(t)) ?? "claude";
     }
+    // a different helper answers now: an error from the last one no longer applies
+    onAskToolChanged: if (!asking)
+        askError = ""
+    function toolLabel(t) {
+        return ({ anthropic: "Claude API", openai: "OpenAI", google: "Gemini API" })[t] ?? t;
+    }
     readonly property string askLabel: ({
             claude: "Claude",
             gemini: "Gemini",
             opencode: "opencode",
             codex: "Codex",
-            ollama: "Ollama"
+            ollama: "Ollama",
+            anthropic: "Claude API",
+            openai: "OpenAI",
+            google: "Gemini API"
         })[askTool] ?? askTool
 
     // the model for each chat tool: cfg.askModels[tool], else the old single askModel
@@ -596,6 +611,8 @@ Singleton {
 
     function askCommand(tool, text, files) {
         const m = modelFor(tool);
+        if (apiTools.includes(tool))
+            return [status.python || python, `${Quickshell.shellDir}/chat/${tool}_chat.py`, m, files?.length ? `Files:\n${files.join("\n")}\n\n${text}` : text];
         const dirs = [...new Set((files ?? []).map(f => f.replace(/[\\/][^\\/]*$/, "") || "/"))];
         switch (tool) {
         case "gemini":
@@ -646,6 +663,8 @@ Singleton {
             cmd = askCommand("claude", text, files).concat(["--resume", chat.id]);
         else if (cont && askTool === "opencode")
             cmd = askCommand("opencode", text, files).concat(["--continue"]);
+        else if (apiTools.includes(askTool))
+            cmd = askCommand(askTool, prompt, files);  // the earlier turns go in $EMBA_TURNS
         else {
             // tools without a resume flag get the conversation so far as context
             if (cont && chat.turns.length)
@@ -664,6 +683,10 @@ Singleton {
         errText = "";
         askCode = null;
         asking = true;
+        askProc.environment = {
+            EMBA_QUIET: "1",
+            EMBA_TURNS: apiTools.includes(askTool) && cont ? JSON.stringify(chat.turns) : ""
+        };
         askProc.command = cmd;
         askProc.workingDirectory = chat.cwd;
         askProc.running = true;
@@ -671,6 +694,16 @@ Singleton {
 
     // one line of output while the answer is being written
     function gotLine(line) {
+        if (apiTools.includes(chat?.tool)) {
+            try {
+                const j = JSON.parse(line);
+                if (j.d)
+                    partial += j.d;
+                if (j.error)
+                    askError = j.error;
+            } catch (e) {}
+            return;
+        }
         if (chat?.tool !== "claude") {
             rawOut += line + "\n";
             partial = rawOut.trim();
@@ -715,7 +748,7 @@ Singleton {
             return;
         }
         // Claude: what was streamed is the answer (its final "result" can carry CLI notices)
-        const text = (chat?.tool === "claude" ? partial || rawOut : rawOut).trim();
+        const text = (chat?.tool === "claude" || apiTools.includes(chat?.tool) ? partial || rawOut : rawOut).trim();
         if (chat && text && !askError) {
             chat.turns = chat.turns.concat([{
                     q: chat.pending,
