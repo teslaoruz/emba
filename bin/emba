@@ -23,6 +23,8 @@ usage: emba [command]
   listen                talk to Emba (voice must be on in settings)
   capture               just take the screenshot and print its path
   models TOOL           the models a chat tool offers (JSON)
+  key set|delete NAME   an integration's API key, kept in the system keyring
+                        (set reads it from $EMBA_KEY, never the command line)
   email FILE...         a new email with these files attached
   terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
@@ -258,6 +260,18 @@ def window_boxes():
                        for c in run("clients") if c.get("mapped") and not c.get("hidden") and c["workspace"]["id"] in shown)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return ""
+
+
+def keys(args):
+    """Run hook/keys.py on a Python that has `keyring`, installing it into Emba's venv once."""
+    py = venv_python()
+    if subprocess.run([py, "-c", "import keyring"], capture_output=True).returncode != 0:
+        venv = venv_dir()
+        if not venv.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+            py = venv_python()
+        subprocess.run([py, "-m", "pip", "install", "--quiet", "keyring"], check=True)
+    return subprocess.run([py, str(APP / "hook" / "keys.py")] + list(args)).returncode
 
 
 def models(tool):
@@ -552,6 +566,8 @@ def main():
         voice_install()
     elif cmd == "voice-remove":
         voice_remove()
+    elif cmd == "key" and rest:
+        sys.exit(keys(rest))
     elif cmd == "models" and rest:
         print(json.dumps(models(rest[0])))
     elif cmd == "email" and rest:

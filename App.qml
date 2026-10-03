@@ -1000,6 +1000,50 @@ Singleton {
                     })))).filter(a => a.argv);
     }
 
+    // ---- integration keys, kept in the system keyring (hook/keys.py) ----
+    property var keysSet: ({})  // {name: true} for every key that is there; never the keys
+    function refreshKeys() {
+        if (!keysProc.running)
+            keysProc.running = true;
+    }
+    function saveKey(name, value) {
+        if (!value.trim() || keySave.running)
+            return;
+        keySave.environment = { EMBA_KEY: value.trim() };  // never on a command line
+        keySave.command = [python, emba, "key", "set", name];
+        keySave.running = true;
+        if (!(cfg.plugins ?? []).includes("services"))
+            setCfg({ plugins: (cfg.plugins ?? []).concat(["services"]) });
+    }
+    function removeKey(name) {
+        if (keySave.running)
+            return;
+        keySave.environment = {};
+        keySave.command = [python, emba, "key", "delete", name];
+        keySave.running = true;
+    }
+    Process {
+        id: keysProc
+
+        command: [root.python, root.emba, "key", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.keysSet = JSON.parse(text) ?? {};
+                } catch (e) {}
+            }
+        }
+    }
+    Process {
+        id: keySave
+
+        onExited: {
+            keySave.environment = {};
+            root.refreshKeys();
+            root.pluginData = Object.assign({}, root.pluginData, { services: undefined });
+        }
+    }
+
     // somewhere for QML plugins to keep things between openings: pluginData.<plugin id>
     property var pluginData: ({})
     readonly property var pluginViews: plugins.filter(p => p.qml).map(p => (p.dir.startsWith("/") ? "file://" : "file:///") + `${p.dir}/${p.qml}`.replace(/\\/g, "/"))

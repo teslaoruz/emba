@@ -1,0 +1,5 @@
+{
+  "name": "Services",
+  "description": "A line each from Vercel, Stripe, Resend, Cal.com, Notion and n8n, for the ones you've added a key for in Settings.",
+  "qml": "View.qml"
+}

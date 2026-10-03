@@ -55,6 +55,11 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
   Put on some music and it pops out and dances along (Linux, any MPRIS player).
 - **Look after it.** Emba gets hungry, sleepy and a bit lonely. Rub the cursor over it to pet it,
   double-click to feed it bamboo, click the island to throw it a ball, hold it to tuck it in.
+- **Your services at a glance.** Paste a key for Vercel, Stripe, Resend, Cal.com, Notion or n8n
+  and the island shows a line from each: the latest deployment, today's payments, bounced emails,
+  your next booking, the page you edited last, failed workflow runs. Keys stay in your system
+  keyring (Keychain, Credential Manager, Secret Service), never in a file. GitHub needs no key: it
+  uses the `gh` you're logged in with.
 - **Little sounds**, if you want them: a chime when an agent needs you, a jingle when it's done.
 - **Make it yours.** It follows your desktop's colours (Caelestia, pywal, or your own), sits in
   any corner, and can be extended with plugins.
@@ -175,6 +180,10 @@ emba feed | play | nap   look after Emba
 emba connect [AGENT]     connect claude, codex, gemini, opencode (shows each change first)
 emba disconnect [AGENT]
 emba autostart on|off
+emba key set NAME        save an integration key from $EMBA_KEY into the system keyring
+emba key delete NAME
+emba models TOOL         the models a chat tool offers
+emba email FILE...       a new email with these files attached
 emba voice-install       set up voice (free, local, ~250 MB)
 emba voice-remove        remove it again
 emba doctor              check everything Emba needs

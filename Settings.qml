@@ -455,6 +455,75 @@ Rectangle {
                 }
             }
 
+            // ---- integrations: a key each, kept in the system keyring ----
+            Section { text: "Integrations" }
+
+            Card {
+                Component.onCompleted: App.refreshKeys()
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Paste a key to see a line from that service in the island. Keys stay in your system keyring, never in a file."
+                    color: Theme.faint
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                Repeater {
+                    model: [
+                        ["vercel", "Vercel", "deployments", "vercel.com/account/tokens"],
+                        ["stripe", "Stripe", "today's payments (a restricted, read-only key is enough)", "dashboard.stripe.com/apikeys"],
+                        ["resend", "Resend", "recent emails and bounces", "resend.com/api-keys"],
+                        ["calcom", "Cal.com", "your next booking", "app.cal.com/settings/developer/api-keys"],
+                        ["notion", "Notion", "the page you edited last", "notion.so/my-integrations"],
+                        ["n8n", "n8n", "failed workflow runs", "your n8n → Settings → API"]
+                    ]
+
+                    ColumnLayout {
+                        id: integ
+
+                        required property var modelData
+                        readonly property bool has: !!App.keysSet[modelData[0]]
+
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            Text {
+                                text: integ.modelData[1]
+                                color: Theme.text
+                                font.pixelSize: 13
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: integ.has ? "connected" : integ.modelData[2]
+                                color: integ.has ? App.cfg.color : Theme.faint
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                            Link {
+                                visible: integ.has
+                                text: "remove"
+                                onClicked: App.removeKey(integ.modelData[0])
+                            }
+                        }
+                        // n8n runs on your own server: it needs its address too
+                        KeyField {
+                            visible: integ.modelData[0] === "n8n" && !App.keysSet["n8n-url"]
+                            hint: "your n8n address, e.g. https://n8n.example.com"
+                            secret: false
+                            onSaved: v => App.saveKey("n8n-url", v)
+                        }
+                        KeyField {
+                            visible: !integ.has
+                            hint: `key from ${integ.modelData[3]}`
+                            onSaved: v => App.saveKey(integ.modelData[0], v)
+                        }
+                    }
+                }
+            }
+
             // ---- plugins ----
             Section {
                 visible: (win.st.plugins ?? []).length > 0
@@ -565,6 +634,47 @@ Rectangle {
                 cmdText.copy();
                 cmdText.deselect();
                 done = true;
+            }
+        }
+    }
+
+    // a one-line field for a key: hidden as you type, saved on Enter, then cleared
+    component KeyField: Rectangle {
+        id: kf
+
+        property string hint
+        property bool secret: true
+        signal saved(string value)
+
+        Layout.fillWidth: true
+        implicitHeight: 30
+        radius: 8
+        color: Qt.alpha(Theme.text, 0.06)
+
+        TextInput {
+            id: kfInput
+
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            verticalAlignment: TextInput.AlignVCenter
+            echoMode: kf.secret ? TextInput.Password : TextInput.Normal
+            color: Theme.text
+            font.pixelSize: 12
+            clip: true
+            onAccepted: if (text.trim()) {
+                kf.saved(text);
+                text = "";
+            }
+
+            Text {
+                visible: !kfInput.text
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                text: kf.hint + " · Enter to save"
+                color: Theme.faint
+                font.pixelSize: 11
+                elide: Text.ElideRight
             }
         }
     }
