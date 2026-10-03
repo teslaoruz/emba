@@ -99,7 +99,8 @@ Item {
     readonly property string view: {
         if (dragging)
             return "drop";
-        if (pending.length && forcedView !== "ask")
+        // a request for permission comes first, unless you are halfway through typing a question
+        if (pending.length && !(forcedView === "ask" && draft !== ""))
             return "approval";
         if (forcedView)
             return forcedView;
@@ -163,7 +164,14 @@ Item {
         }
     }
     property string lastMode: "hidden"
+    // closed with Esc: don't pop open again under the cursor that is still there
+    property bool closedByKey: false
     onModeChanged: {
+        // the cursor came back just as the island closed: no new hover arrives, so open it here
+        if (!open && !closedByKey && hover.hovered && (mode === "compact" || mode === "dots")) {
+            openTimer.interval = 260;
+            openTimer.restart();
+        }
         if (mode === "expanded" && lastMode !== "expanded" && !["approval", "finished", "limit"].includes(view))
             sfx("open");
         else if (lastMode === "expanded" && mode !== "expanded")
@@ -285,7 +293,7 @@ Item {
         id: leaveTimer
 
         // an empty ask box gets a little longer: you may be reaching for the keyboard
-        interval: root.view === "ask" ? 5000 : (App.cfg.collapseDelay ?? 1200)
+        interval: root.view === "ask" ? 3000 : (App.cfg.collapseDelay ?? 1200)
         onTriggered: if (!root.sticky)
             root.collapse()
     }
@@ -483,12 +491,15 @@ Item {
                             panda.wave();
                             openTimer.interval = 650;
                             openTimer.restart();
-                        } else if (root.mode === "compact") {
+                        } else if (root.mode === "compact" || root.mode === "peek") {
+                            // already out (the pill, or saying hi): open a little sooner
+                            greetEnd.stop();
                             openTimer.interval = 260;
                             openTimer.restart();
                         }
                     } else {
                         openTimer.stop();
+                        root.closedByKey = false;
                         if (root.peeking && !root.open)
                             unpeek.restart();
                         else if (root.open)
@@ -881,7 +892,8 @@ Item {
                         care: careView
                     })[root.view === "result" ? "ask" : root.view] ?? emptyView  // answers live in the conversation
 
-                Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 0 } }
+                // in over 220 ms; out over 120 ms, so a closing island isn't an empty box
+                Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 120 } }
 
                 // a new view eases in: a short fade and a small rise, instead of a hard swap
                 onLoaded: if (item) {
@@ -967,6 +979,7 @@ Item {
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Escape) {
+                    root.closedByKey = true;
                     root.collapse();
                 } else if (root.view === "approval" && root.pending.length && root.armed && !root.pending[0].questions?.length) {
                     if (event.key === Qt.Key_Y)
@@ -2327,7 +2340,10 @@ Item {
                         root.files = [];
                         root.forcedView = "ask";
                     }
-                    Keys.onEscapePressed: root.collapse()
+                    Keys.onEscapePressed: {
+                        root.closedByKey = true;
+                        root.collapse();
+                    }
 
                     Text {
                         visible: !input.text
