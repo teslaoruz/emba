@@ -604,7 +604,7 @@ Item {
                     PropertyAction { target: morsel; property: "scale"; value: 1 }
                     ParallelAnimation {
                         NumberAnimation { target: morsel; property: "x"; to: panda.x + panda.width / 2 - 9; duration: 380; easing.type: Easing.InBack }
-                        NumberAnimation { target: morsel; property: "y"; to: panda.y + panda.height * 0.31 - 11; duration: 380; easing.type: Easing.InQuad }  // into the slot on its head
+                        NumberAnimation { target: morsel; property: "y"; to: panda.y + panda.height * 0.23 - 11; duration: 380; easing.type: Easing.InQuad }  // into the slot on its head
                         NumberAnimation { target: morsel; property: "scale"; to: 0.25; duration: 380; easing.type: Easing.InQuad }
                         NumberAnimation { target: morsel; property: "rotation"; from: -20; to: 200; duration: 380 }
                     }
@@ -1474,20 +1474,24 @@ Item {
                     HoverHandler { id: rh; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: App.focus(srow.modelData.sid) }
 
-                    // a strip in the agent's colour says whose session this is
-                    Rectangle {
-                        x: 0
-                        y: 10
-                        width: 3
-                        height: parent.height - 20
-                        radius: 1.5
-                        color: App.agentColour(srow.modelData.agent)
+                    // a little Emba in the agent's bandana says whose session this is; it
+                    // stands still (no clock of its own), but looks up when the session needs you
+                    Panda {
+                        x: 6
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 34
+                        height: 34
+                        running: false
+                        lively: false
+                        mood: srow.modelData.state === "waiting" ? "waiting" : "idle"
+                        scarf: App.agentColour(srow.modelData.agent)
+                        bodyColor: App.cfg.color
                     }
 
                     Column {
-                        x: 14
+                        x: 46
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - 28
+                        width: parent.width - 58
 
                         // project, then where it lives; agent and how long on the right
                         RowLayout {

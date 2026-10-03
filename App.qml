@@ -150,7 +150,7 @@ Singleton {
 
     // one colour per agent, so their sessions are told apart at a glance
     readonly property var agentColours: ({
-            claude: "#e07a52",
+            claude: "#f2c38f",   // sand: Emba's own fur is already orange
             codex: "#3ecf8e",
             gemini: "#5b9cf6",
             opencode: "#c084fc"
