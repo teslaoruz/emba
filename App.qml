@@ -30,7 +30,8 @@ Singleton {
             trackCursor: true,       // eyes follow the cursor everywhere (Hyprland)
             limitWarn: 80,           // % of a usage window that triggers a warning
             askWith: "auto",         // claude gemini opencode codex ollama; auto = first installed
-            askModel: "",            // model for the ask box, "" = the tool's default
+            askModel: "",
+            askModels: ({}),            // model for the ask box, "" = the tool's default
             focusCommand: [],        // argv; {window} {pid} {cwd} are filled in
             theme: "auto",           // auto caelestia pywal custom default
             voice: false,            // talk to Emba (needs: pip install faster-whisper sounddevice piper-tts)
@@ -558,8 +559,43 @@ Singleton {
             ollama: "Ollama"
         })[askTool] ?? askTool
 
+    // the model for each chat tool: cfg.askModels[tool], else the old single askModel
+    function modelFor(tool) {
+        return (cfg.askModels ?? {})[tool] || cfg.askModel || "";
+    }
+    function setModel(tool, model) {
+        const m = Object.assign({}, cfg.askModels ?? {});
+        m[tool] = model;
+        setCfg({ askModels: m });
+    }
+    // what each tool offers, fetched once per tool: models[tool] = [names]
+    property var models: ({})
+    function loadModels(tool) {
+        if (models[tool] !== undefined || modelsProc.running)
+            return;
+        modelsProc.tool = tool;
+        modelsProc.command = [python, emba, "models", tool];
+        modelsProc.running = true;
+    }
+    Process {
+        id: modelsProc
+
+        property string tool
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let list = [];
+                try {
+                    list = JSON.parse(text);
+                } catch (e) {}
+                const next = Object.assign({}, root.models);
+                next[modelsProc.tool] = Array.isArray(list) ? list.slice(0, 60) : [];
+                root.models = next;
+            }
+        }
+    }
+
     function askCommand(tool, text, files) {
-        const m = cfg.askModel;
+        const m = modelFor(tool);
         const dirs = [...new Set((files ?? []).map(f => f.replace(/[\\/][^\\/]*$/, "") || "/"))];
         switch (tool) {
         case "gemini":

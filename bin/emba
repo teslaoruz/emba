@@ -22,6 +22,7 @@ usage: emba [command]
   look                  drag a rectangle on screen and ask about it
   listen                talk to Emba (voice must be on in settings)
   capture               just take the screenshot and print its path
+  models TOOL           the models a chat tool offers (JSON)
   email FILE...         a new email with these files attached
   terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
@@ -257,6 +258,21 @@ def window_boxes():
                        for c in run("clients") if c.get("mapped") and not c.get("hidden") and c["workspace"]["id"] in shown)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         return ""
+
+
+def models(tool):
+    """The models a chat tool offers, as far as it will say. Empty: type one in."""
+    if tool == "claude":
+        return ["opus", "sonnet", "haiku"]  # Claude Code's own aliases for the latest of each
+    cmd = {"opencode": ["opencode", "models"], "ollama": ["ollama", "list"]}.get(tool)
+    if not cmd or not shutil.which(cmd[0]):
+        return []
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=45).stdout  # a cold first start is slow
+    except (OSError, subprocess.SubprocessError):
+        return []
+    lines = [line.split()[0] for line in out.splitlines() if line.strip()]
+    return lines[1:] if tool == "ollama" else lines  # ollama prints a header row
 
 
 def email(files):
@@ -536,6 +552,8 @@ def main():
         voice_install()
     elif cmd == "voice-remove":
         voice_remove()
+    elif cmd == "models" and rest:
+        print(json.dumps(models(rest[0])))
     elif cmd == "email" and rest:
         email(rest)
     elif cmd == "capture":

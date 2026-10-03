@@ -1171,6 +1171,18 @@ Item {
         elide: Text.ElideRight
     }
 
+    // a small drawn chevron, pointing down (or up)
+    component VChevron: Item {
+        property bool down: true
+
+        width: 8
+        height: 5
+        rotation: down ? 0 : 180
+
+        Rectangle { x: 0; y: 0; width: 5.5; height: 1.6; radius: 0.8; color: root.ui.dim; rotation: 40; transformOrigin: Item.Left }
+        Rectangle { x: 3.6; y: 3.5; width: 5.5; height: 1.6; radius: 0.8; color: root.ui.dim; rotation: -40; transformOrigin: Item.Left }
+    }
+
     // a round, drawn icon button: "gear" (settings) or "back"
     component IconButton: Rectangle {
         id: ib
@@ -1978,6 +1990,12 @@ Item {
 
             readonly property var turns: App.chat?.turns ?? []
             readonly property bool talking: turns.length > 0 || !!App.chat?.pending
+            property bool picking: false
+            readonly property string toolNow: App.askTool
+            onPickingChanged: if (picking)
+                App.loadModels(toolNow)
+            onToolNowChanged: if (picking)
+                App.loadModels(toolNow)
 
             spacing: 8
 
@@ -2017,6 +2035,34 @@ Item {
                         TapHandler { onTapped: App.setCfg({ askWith: parent.modelData }) }
                     }
                 }
+
+                // which model: the chosen one, or "default"; click for the list
+                Rectangle {
+                    width: modelChip.implicitWidth + 30
+                    height: 24
+                    radius: 12
+                    color: askCol.picking ? root.ui.fillHover : mh.hovered ? root.ui.fill : "transparent"
+                    border.width: 1
+                    border.color: root.ui.fill
+
+                    Text {
+                        id: modelChip
+
+                        x: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, 150)
+                        text: App.modelFor(App.askTool) || "default model"
+                        color: root.ui.dim
+                        font.pixelSize: 12
+                        elide: Text.ElideMiddle
+                    }
+                    // a small chevron
+                    VChevron { x: parent.width - 14; anchors.verticalCenter: parent.verticalCenter; down: !askCol.picking }
+                    HoverHandler { id: mh; cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        onTapped: askCol.picking = !askCol.picking
+                    }
+                }
             }
                 Link {
                     visible: askCol.talking
@@ -2024,6 +2070,82 @@ Item {
                     onClicked: {
                         App.newChat();
                         root.files = [];
+                    }
+                }
+            }
+
+            // the model list: what the tool offers, its default, or type a name
+            Flow {
+                Layout.fillWidth: true
+                visible: askCol.picking
+                spacing: 4
+
+                Repeater {
+                    model: [""].concat(App.models[App.askTool] ?? [])
+
+                    Rectangle {
+                        id: mopt
+
+                        required property string modelData
+                        readonly property bool on: (App.modelFor(App.askTool) || "") === modelData
+
+                        width: moptText.implicitWidth + 18
+                        height: 24
+                        radius: 12
+                        color: on ? root.ui.accent : moh.hovered ? root.ui.fillHover : root.ui.fill
+
+                        Text {
+                            id: moptText
+
+                            anchors.centerIn: parent
+                            text: mopt.modelData || "default"
+                            color: mopt.on ? root.ui.accentInk : root.ui.text
+                            font.pixelSize: 12
+                        }
+                        HoverHandler { id: moh; cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            onTapped: {
+                                App.setModel(App.askTool, mopt.modelData);
+                                askCol.picking = false;
+                            }
+                        }
+                    }
+                }
+                Text {
+                    visible: App.models[App.askTool] === undefined
+                    text: "Looking…"
+                    color: root.ui.faint
+                    font.pixelSize: 12
+                }
+                Rectangle {
+                    width: 150
+                    height: 24
+                    radius: 12
+                    color: root.ui.fill
+
+                    TextInput {
+                        id: typedModel
+
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: root.ui.text
+                        font.pixelSize: 12
+                        clip: true
+                        onAccepted: if (text.trim()) {
+                            App.setModel(App.askTool, text.trim());
+                            text = "";
+                            askCol.picking = false;
+                        }
+
+                        Text {
+                            visible: !typedModel.text
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "or type a model"
+                            color: root.ui.faint
+                            font.pixelSize: 12
+                        }
                     }
                 }
             }
