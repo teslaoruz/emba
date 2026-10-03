@@ -190,6 +190,12 @@ Rectangle {
                     onToggled: on => App.run(on ? ["connect", "claude", "--statusline"] : ["connect", "claude"])
                 }
                 Toggle {
+                    visible: !!win.st.tray
+                    text: "Icon in the system tray"
+                    checked: App.cfg.tray !== false
+                    onToggled: on => App.setCfg({ tray: on })
+                }
+                Toggle {
                     text: "Start when I log in"
                     checked: !!win.st.autostart
                     enabled: !App.busy

@@ -22,6 +22,7 @@ from pathlib import Path
 from PySide6.QtCore import (ClassInfo, Property, QFileSystemWatcher, QObject, QPoint, QProcess, QProcessEnvironment, QRect,
                             QTimer, Signal,
                             Slot)
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QCursor, QGuiApplication, QIcon, QRegion
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import (ListProperty, QQmlApplicationEngine, QQmlComponent, QQmlEngine, qmlRegisterSingletonInstance,
@@ -526,7 +527,7 @@ def already_running(address):
 def main():
     address = socket_address()
     os.environ["EMBA_SOCKET"] = address
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)  # widgets: for the tray menu
     app.setApplicationName("Emba")
     app.setQuitOnLastWindowClosed(False)
     icon = APP / "assets" / "emba.svg"
@@ -541,6 +542,9 @@ def main():
     qmlRegisterType(Singleton, "Quickshell", 1, 0, "Singleton")
     for cls in (Process, StdioCollector, SplitParser, FileView, SocketServer, Socket, IpcHandler):
         qmlRegisterType(cls, "Quickshell.Io", 1, 0, cls.__name__)
+
+    import tray
+    app._tray = tray.attach(app)
 
     engine = QQmlApplicationEngine()
     engine.addImportPath(str(stage_shared_qml()))

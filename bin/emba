@@ -491,6 +491,7 @@ def status():
         "ask": [t for t in ASK_TOOLS if shutil.which(t)],
         "python": venv_python(),
         "voice": voice_ready(venv_python()),
+        "tray": subprocess.run([venv_python(), "-c", "import PySide6.QtWidgets"], capture_output=True).returncode == 0,
         "plugins": plugins(),
     }
 

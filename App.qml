@@ -22,6 +22,7 @@ Singleton {
             color: "#e2683c",        // Emba's fur
             hideWhenIdle: true,      // only a small nub while nothing runs
             danceToMusic: true,      // pop out and dance while music plays
+            tray: true,              // an icon in the system tray (Open, Settings, Quit)
             sounds: false,           // little sound effects (off until the set is chosen)
             soundVolume: 0.5,
             autoOpenOnPermission: true,
@@ -1031,6 +1032,17 @@ Singleton {
                             agent: s.agent
                         })
                     })))).filter(a => a.argv);
+    }
+
+    // ---- the tray icon on Quickshell (the Qt host has its own): a small PySide helper ----
+    // started once Emba knows which Python has PySide (status), stopped when switched off
+    readonly property bool trayWanted: !!cfg.tray && typeof Quickshell.processId === "number" && !!status.tray && !!status.python
+    onTrayWantedChanged: {
+        trayProc.command = trayWanted ? [status.python, `${Quickshell.shellDir}/desktop/tray.py`] : [];
+        trayProc.running = trayWanted;
+    }
+    Process {
+        id: trayProc
     }
 
     // ---- integration keys, kept in the system keyring (hook/keys.py) ----
