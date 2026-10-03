@@ -878,6 +878,18 @@ Item {
                     })[root.view === "result" ? "ask" : root.view] ?? emptyView  // answers live in the conversation
 
                 Behavior on opacity { NumberAnimation { duration: content.opacity < 0.5 ? 220 : 0 } }
+
+                // a new view eases in: a short fade and a small rise, instead of a hard swap
+                onLoaded: if (item) {
+                    item.opacity = 0;
+                    swapIn.restart();
+                }
+                ParallelAnimation {
+                    id: swapIn
+
+                    NumberAnimation { target: content.item; property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: content.item; property: "y"; from: 8; to: 0; duration: 260; easing.type: Easing.OutCubic }
+                }
             }
 
             // settings on the main screens; a way back to them from everywhere else
