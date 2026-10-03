@@ -159,6 +159,13 @@ Item {
         property real wanderLeft: 1
         property point wander: Qt.point(0, 0)
         property real mouthHold: 0
+        // the head's own springs (see step)
+        property real hx: 0
+        property real hxVel: 0
+        property real hy: 0
+        property real hyVel: 0
+        property real htilt: 0
+        property real htiltVel: 0
         // the mailbox slot on top of the head: 0 shut, 1 wide open
         property real slot: 0
         property real slotVel: 0
@@ -481,6 +488,15 @@ Item {
             p.syVel -= p.bobVel * 0.012;
             p.sxVel += p.bobVel * 0.008;
         }
+        // the head rides on its own, softer springs: it lags behind a hop or a sway and settles
+        // with a little overshoot, breathes when calm, and tilts toward what Emba looks at
+        const breathe = (m === "idle" || m === "sleepy" || m === "lonely") ? Math.sin(t * 1.9) * 0.7 : 0;
+        p.hxVel += (-170 * (p.hx - p.sway) - 9 * p.hxVel) * dt;
+        p.hx += p.hxVel * dt;
+        p.hyVel += (-190 * (p.hy - (p.bob + breathe)) - 9 * p.hyVel) * dt;
+        p.hy += p.hyVel * dt;
+        p.htiltVel += (-150 * (p.htilt - (p.lookX * 0.16 + (p.sway - p.hx) * 0.02)) - 8 * p.htiltVel) * dt;
+        p.htilt += p.htiltVel * dt;
         p.tailVel += (-60 * (p.tail - tail) - 6 * p.tailVel) * dt;  // a lazy, swishy spring
         p.tail += p.tailVel * dt;
         p.sway = approach(p.sway, sway, 9, dt);
@@ -497,8 +513,10 @@ Item {
         // ears: own twitches on top of whatever the pose wants
         const twitchL = Math.max(0, Math.sin(t * 1.1) - 0.94) * 5;
         const twitchR = Math.max(0, Math.sin(t * 0.83 + 2) - 0.94) * 5;
-        p.earL = approach(p.earL, earL + twitchL, 14, dt);
-        p.earR = approach(p.earR, earR + twitchR, 14, dt);
+        // and they flop a little as the head bounces
+        const flop = Math.max(-0.5, Math.min(0.5, -p.hyVel * 0.006));
+        p.earL = approach(p.earL, earL + twitchL + flop, 14, dt);
+        p.earR = approach(p.earR, earR + twitchR + flop, 14, dt);
 
         if (p.spinLeft > 0) {
             p.spinLeft = Math.max(0, p.spinLeft - dt);
@@ -645,7 +663,7 @@ Item {
         const g = root.gaze, moved = g && Math.hypot(g.x - lastGaze.x, g.y - lastGaze.y) > 3;
         if (g)
             lastGaze = g;
-        return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || p.slot > 0.01 || p.chew > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
+        return moved || sparkles.children.length > 0 || p.act !== "" || p.emoteLeft > 0 || p.spinLeft > 0 || p.shakeLeft > 0 || p.purr > 0 || p.mouthHold > 0 || p.slot > 0.01 || p.chew > 0 || Math.abs(p.bobVel) > 4 || Math.abs(p.hyVel) > 2 || Math.abs(p.hxVel) > 2 || Math.abs(p.htiltVel) > 0.05 || Math.abs(p.syVel) > 0.05 || Math.abs(p.sxVel) > 0.05 || root.talk > 0 || root.eager || hover.hovered || ["working", "waiting", "question", "done", "listening", "thinking", "error"].includes(root.mood);
     }
 
     // Two clocks. While Emba moves, a FrameAnimation steps it once per screen
@@ -695,6 +713,15 @@ Item {
     readonly property real fy: -p.lookY * 4
     // which kind of eyes to show
     readonly property string eyes: e === "love" ? "love" : e === "dizzy" ? "dizzy" : (m === "error" && !e) ? "x" : (e === "happy" || (m === "done" && !e) || p.act === "dance") ? "happy" : e === "annoyed" ? "annoyed" : p.eyeOpen < 0.15 ? "shut" : "open"
+    // a new expression comes in behind a quick blink instead of snapping over
+    // (a blink itself is "shut" then "open" again: that is not a new expression)
+    property string lastEyes: "open"
+    onEyesChanged: {
+        if (eyes !== "shut" && eyes !== lastEyes && p.blinkLeft <= 0)
+            p.blinkLeft = 0.09;
+        if (eyes !== "shut")
+            lastEyes = eyes;
+    }
 
     // an ellipse: a circle squashed vertically, so it stays a true ellipse
     component Ell: Rectangle {
@@ -771,16 +798,16 @@ Item {
 
             // tail: a striped curl that swishes behind, from the side of the body up past the head
             Repeater {
-                model: 7
+                model: 5
 
                 Ell {
                     required property int index
-                    readonly property real k: index / 6
+                    readonly property real k: index / 4
                     readonly property real ang: -0.4 - k * 1.1 + p.tail * k
 
                     cx: 18 + Math.cos(ang) * 5 + k * 12 + Math.sin(p.tail) * k * 6
                     cy: 31 - k * 20 + Math.sin(ang) * 2
-                    rx: 7 - k * 1.6
+                    rx: 7.6 - k * 1.8
                     color: k > 0.85 ? root.dark : index % 2 === 1 ? root.belly : root.fur
                 }
             }
@@ -818,183 +845,185 @@ Item {
                 }
             }
 
-            // headphones: the band goes behind the head, the cups over the ears' sides
-            VPath {
-                visible: root.outfit === "headphones"
-                d: "M -31 -14 Q -31 -44 0 -44 Q 31 -44 31 -14"
-                stroke: "#2b2d36"
-                line: 4.5
-            }
-
-            // the head: one wide flat block, no shading
-            Rectangle { x: -32; y: -32; width: 64; height: 48; radius: 16; color: root.fur }
-
-            // accessories that sit on the head
+            // the head and everything on it, on its own springs: it follows the body a beat late
             Item {
-                visible: root.outfit === "headphones"
+                id: head
 
-                Rectangle { x: -38; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
-                Rectangle { x: 29; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
-                Rectangle { x: -36.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
-                Rectangle { x: 33.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
-            }
-            Item {
-                visible: root.outfit === "sprout"
+                // plain x/y/rotation: one transform node, cheaper than a transform list
+                x: (p.hx - p.sway) * 0.8
+                y: Math.max(-6, Math.min(6, p.hy - p.bob))
+                rotation: p.htilt * 180 / Math.PI
+                transformOrigin: Item.TopLeft
 
-                VPath { d: "M 0 -31 Q 1 -38 -1 -44"; stroke: "#3f8f4e"; line: 2.4 }
-                VPath { d: "M -1 -42 Q -12 -48 -13 -38 Q -6 -36 -1 -42 Z"; fill: "#57b36a" }
-                VPath { d: "M -0.5 -40 Q 9 -49 13 -41 Q 6 -36 -0.5 -40 Z"; fill: "#6cc97e" }
-            }
-            Item {
-                visible: root.outfit === "cap"
-
-                VPath { d: "M -27 -26 Q -26 -45 0 -45 Q 26 -45 27 -26 Z"; fill: root.scarf.a > 0 ? root.scarf : "#c084fc" }
-                VPath { d: "M 12 -30 Q 30 -33 38 -27 Q 30 -24 12 -26 Z"; fill: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
-                Rectangle { x: -2; y: -47; width: 4; height: 3; radius: 1.5; color: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
-            }
-
-            // the mailbox slot on top of the head: widens first, then opens up
-            Rectangle {
-                readonly property real w: 36 * Math.min(1, p.slot * 2.4)
-                readonly property real h: Math.min(11, 11 * p.slot)
-
-                visible: p.slot > 0.02
-                x: -w / 2
-                y: -29
-                width: w
-                height: h
-                radius: Math.min(w, h) / 2
-                color: "#0b0b0e"
-            }
-
-            // the face moves a little with the gaze
-            Item {
-                x: root.fx
-                y: root.fy
-
-                // cheek patches and the muzzle: the red panda's mask
-                Ell { cx: -19; cy: -1; rx: 8; ry: 6; color: root.cream }
-                Ell { cx: 19; cy: -1; rx: 8; ry: 6; color: root.cream }
-                Ell { cx: 0; cy: 2; rx: 9; ry: 6; color: root.cream }
-                // brows
-                VPath { d: "M -15 -15 Q -10 -19 -5 -15"; stroke: root.cream; line: 3.6 }
-                VPath { d: "M 5 -15 Q 10 -19 15 -15"; stroke: root.cream; line: 3.6 }
-
-                // blush, only when it's loved
-                Repeater {
-                    model: [-1, 1]
-
-                    Ell {
-                        required property int modelData
-
-                        visible: root.e === "love" || p.purr > 0
-                        cx: 19 * modelData
-                        cy: -1
-                        rx: 5
-                        ry: 3.4
-                        color: Qt.rgba(1, 0.36, 0.54, 0.75)
-                    }
+                // headphones: the band goes behind the head, the cups over the ears' sides
+                VPath {
+                    visible: root.outfit === "headphones"
+                    d: "M -31 -14 Q -31 -44 0 -44 Q 31 -44 31 -14"
+                    stroke: "#2b2d36"
+                    line: 4.5
                 }
 
-                // eyes
-                Repeater {
-                    model: [-1, 1]
+                // the head: one wide flat block, no shading
+                Rectangle { x: -32; y: -32; width: 64; height: 48; radius: 16; color: root.fur }
 
-                    Item {
-                        id: eye
+                // accessories that sit on the head
+                Item {
+                    visible: root.outfit === "headphones"
 
-                        required property int modelData
-                        readonly property real sc: p.eyeScale
-                        readonly property real open: p.eyeOpen
-                        readonly property color ink: "#1e1512"
+                    Rectangle { x: -38; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
+                    Rectangle { x: 29; y: -20; width: 9; height: 18; radius: 4.5; color: "#2b2d36" }
+                    Rectangle { x: -36.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
+                    Rectangle { x: 33.5; y: -17; width: 3; height: 12; radius: 1.5; color: root.scarf.a > 0 ? root.scarf : "#5b9cf6" }
+                }
+                Item {
+                    visible: root.outfit === "sprout"
 
-                        x: 10 * modelData
-                        y: -8
+                    VPath { d: "M 0 -31 Q 1 -38 -1 -44"; stroke: "#3f8f4e"; line: 2.4 }
+                    VPath { d: "M -1 -42 Q -12 -48 -13 -38 Q -6 -36 -1 -42 Z"; fill: "#57b36a" }
+                    VPath { d: "M -0.5 -40 Q 9 -49 13 -41 Q 6 -36 -0.5 -40 Z"; fill: "#6cc97e" }
+                }
+                Item {
+                    visible: root.outfit === "cap"
 
-                        // open: a plain dot with one small glint
+                    VPath { d: "M -27 -26 Q -26 -45 0 -45 Q 26 -45 27 -26 Z"; fill: root.scarf.a > 0 ? root.scarf : "#c084fc" }
+                    VPath { d: "M 12 -30 Q 30 -33 38 -27 Q 30 -24 12 -26 Z"; fill: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
+                    Rectangle { x: -2; y: -47; width: 4; height: 3; radius: 1.5; color: root.shade(root.scarf.a > 0 ? root.scarf : "#c084fc", 0.75) }
+                }
+
+                // the mailbox slot on top of the head: widens first, then opens up
+                Rectangle {
+                    readonly property real w: 36 * Math.min(1, p.slot * 2.4)
+                    readonly property real h: Math.min(11, 11 * p.slot)
+
+                    visible: p.slot > 0.02
+                    x: -w / 2
+                    y: -29
+                    width: w
+                    height: h
+                    radius: Math.min(w, h) / 2
+                    color: "#0b0b0e"
+                }
+
+                // the face moves a little with the gaze
+                Item {
+                    x: root.fx
+                    y: root.fy
+
+                    // cheek patches and the muzzle: the red panda's mask
+                    Ell { cx: -19; cy: -1; rx: 8; ry: 6; color: root.cream }
+                    Ell { cx: 19; cy: -1; rx: 8; ry: 6; color: root.cream }
+                    Ell { cx: 0; cy: 2; rx: 9; ry: 6; color: root.cream }
+    
+                    // blush, only when it's loved
+                    Repeater {
+                        model: [-1, 1]
+
+                        Ell {
+                            required property int modelData
+
+                            visible: root.e === "love" || p.purr > 0
+                            cx: 19 * modelData
+                            cy: -1
+                            rx: 5
+                            ry: 3.4
+                            color: Qt.rgba(1, 0.36, 0.54, 0.75)
+                        }
+                    }
+
+                    // eyes
+                    Repeater {
+                        model: [-1, 1]
+
                         Item {
-                            visible: root.eyes === "open"
+                            id: eye
 
-                            Ell { cx: 0; cy: 0; rx: 3.4 * eye.sc; ry: 3.6 * eye.sc * eye.open; color: eye.ink }
-                            Ell { cx: 1 * eye.sc; cy: -1.3 * eye.sc * eye.open; rx: 0.95 * eye.sc; ry: 0.95 * eye.sc * Math.min(1, eye.open * 1.5); color: "white" }
-                            // tired: a flat lid across the top
-                            Rectangle {
-                                visible: (root.m === "limit" || root.m === "sleepy") && !root.e
-                                x: -4.2 * eye.sc
-                                y: -3.6 * eye.sc * eye.open - 1
-                                width: 8.4 * eye.sc
-                                height: 3.6 * eye.sc * eye.open * 0.9
-                                color: root.fur
+                            required property int modelData
+                            readonly property real sc: p.eyeScale
+                            readonly property real open: p.eyeOpen
+                            readonly property color ink: "#1e1512"
+
+                            x: 10 * modelData
+                            y: -8
+
+                            // open: a plain dot
+                            Item {
+                                visible: root.eyes === "open"
+
+                                Ell { cx: 0; cy: 0; rx: 3.4 * eye.sc; ry: 3.6 * eye.sc * eye.open; color: eye.ink }
+                                // tired: a flat lid across the top
+                                Rectangle {
+                                    visible: (root.m === "limit" || root.m === "sleepy") && !root.e
+                                    x: -4.2 * eye.sc
+                                    y: -3.6 * eye.sc * eye.open - 1
+                                    width: 8.4 * eye.sc
+                                    height: 3.6 * eye.sc * eye.open * 0.9
+                                    color: root.fur
+                                }
+                            }
+                            VPath {
+                                visible: root.eyes === "shut"
+                                d: "M -3 0 Q 0 2.8 3 0"
+                                stroke: eye.ink
+                                line: 2.2
+                            }
+                            VPath {
+                                visible: root.eyes === "happy"
+                                d: "M -3 1 Q 0 -2.4 3 1"
+                                stroke: eye.ink
+                                line: 2.2
+                            }
+                            VPath {
+                                visible: root.eyes === "x"
+                                d: "M -2.8 -2.8 L 2.8 2.8 M 2.8 -2.8 L -2.8 2.8"
+                                stroke: eye.ink
+                                line: 2.2
+                            }
+                            VPath {
+                                visible: root.eyes === "annoyed"
+                                d: `M ${-3.4 * eye.modelData} -2.6 L ${3 * eye.modelData} 0 L ${-3.4 * eye.modelData} 2.6`
+                                stroke: eye.ink
+                                line: 2.2
+                            }
+                            VPath {
+                                visible: root.eyes === "love"
+                                d: "M 0 4 C -7 -0.6 -2.9 -6 0 -1.8 C 2.9 -6 7 -0.6 0 4 Z"
+                                fill: "#e3122f"  // a proper red heart
+                                scale: eye.sc
+                            }
+                            VPath {
+                                visible: root.eyes === "dizzy"
+                                d: root.spiralPath
+                                stroke: eye.ink
+                                line: 1.4
+                                rotation: p.t * 9 * eye.modelData * 180 / Math.PI
                             }
                         }
-                        VPath {
-                            visible: root.eyes === "shut"
-                            d: "M -3 0 Q 0 2.8 3 0"
-                            stroke: eye.ink
-                            line: 2.2
-                        }
-                        VPath {
-                            visible: root.eyes === "happy"
-                            d: "M -3 1 Q 0 -2.4 3 1"
-                            stroke: eye.ink
-                            line: 2.2
-                        }
-                        VPath {
-                            visible: root.eyes === "x"
-                            d: "M -2.8 -2.8 L 2.8 2.8 M 2.8 -2.8 L -2.8 2.8"
-                            stroke: eye.ink
-                            line: 2.2
-                        }
-                        VPath {
-                            visible: root.eyes === "annoyed"
-                            d: `M ${-3.4 * eye.modelData} -2.6 L ${3 * eye.modelData} 0 L ${-3.4 * eye.modelData} 2.6`
-                            stroke: eye.ink
-                            line: 2.2
-                        }
-                        VPath {
-                            visible: root.eyes === "love"
-                            d: "M 0 4 C -7 -0.6 -2.9 -6 0 -1.8 C 2.9 -6 7 -0.6 0 4 Z"
-                            fill: "#e3122f"  // a proper red heart
-                            scale: eye.sc
-                        }
-                        VPath {
-                            visible: root.eyes === "dizzy"
-                            d: root.spiralPath
-                            stroke: eye.ink
-                            line: 1.4
-                            rotation: p.t * 9 * eye.modelData * 180 / Math.PI
-                        }
+                    }
+
+                    // round glasses
+                    Item {
+                        visible: root.outfit === "glasses"
+
+                        Ell { cx: -10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
+                        Ell { cx: 10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
+                        VPath { d: "M -16.2 -8 A 6.2 6.2 0 1 0 -3.8 -8 A 6.2 6.2 0 1 0 -16.2 -8 M 3.8 -8 A 6.2 6.2 0 1 0 16.2 -8 A 6.2 6.2 0 1 0 3.8 -8 M -3.8 -9 Q 0 -11 3.8 -9"; stroke: "#2b1a14"; line: 1.6 }
+                    }
+
+                    // nose; a mouth only when it opens (talking, surprised, eating)
+                    VPath {
+                        d: "M -3 -1 L 3 -1 L 0 2.2 Z"
+                        fill: root.dark
+                    }
+                    Ell {
+                        visible: p.mouth > 0.08
+                        cx: 0
+                        cy: 4.8 + p.mouth
+                        rx: 1.8 + p.mouth * 1.2
+                        ry: 0.8 + p.mouth * 2.4
+                        color: "#5e2420"
                     }
                 }
 
-                // round glasses
-                Item {
-                    visible: root.outfit === "glasses"
-
-                    Ell { cx: -10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
-                    Ell { cx: 10; cy: -8; rx: 6.2; color: Qt.rgba(1, 1, 1, 0.16) }
-                    VPath { d: "M -16.2 -8 A 6.2 6.2 0 1 0 -3.8 -8 A 6.2 6.2 0 1 0 -16.2 -8 M 3.8 -8 A 6.2 6.2 0 1 0 16.2 -8 A 6.2 6.2 0 1 0 3.8 -8 M -3.8 -9 Q 0 -11 3.8 -9"; stroke: "#2b1a14"; line: 1.6 }
-                }
-
-                // nose, and a small mouth (or an open one)
-                VPath {
-                    d: "M -3 -1 L 3 -1 L 0 2.2 Z"
-                    fill: root.dark
-                }
-                VPath {
-                    visible: p.mouth <= 0.08
-                    d: "M -2.6 3.6 Q -1.3 5 0 3.6 Q 1.3 5 2.6 3.6"
-                    stroke: root.dark
-                    line: 1.1
-                }
-                Ell {
-                    visible: p.mouth > 0.08
-                    cx: 0
-                    cy: 4.8 + p.mouth
-                    rx: 1.8 + p.mouth * 1.2
-                    ry: 0.8 + p.mouth * 2.4
-                    color: "#5e2420"
-                }
             }
 
             // a tiny laptop while an agent works

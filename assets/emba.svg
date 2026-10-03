@@ -12,16 +12,12 @@
   <path d="M22 26 C20 14 28 10 36 20 Z M78 26 C80 14 72 10 64 20 Z" fill="#3a2420"/>
   <!-- head -->
   <rect x="18" y="18" width="64" height="48" rx="16" fill="#e2683c"/>
-  <!-- mask: cheeks, brows, muzzle -->
+  <!-- mask: cheeks and muzzle -->
   <ellipse cx="31" cy="49" rx="8" ry="6" fill="#fff4e8"/>
   <ellipse cx="69" cy="49" rx="8" ry="6" fill="#fff4e8"/>
-  <path d="M35 35 Q40 31 45 35 M55 35 Q60 31 65 35" stroke="#fff4e8" stroke-width="3.6" fill="none" stroke-linecap="round"/>
   <ellipse cx="50" cy="52" rx="9" ry="6" fill="#fff4e8"/>
-  <!-- eyes, nose, mouth -->
+  <!-- eyes and nose -->
   <circle cx="40" cy="42" r="3.4" fill="#1e1512"/>
   <circle cx="60" cy="42" r="3.4" fill="#1e1512"/>
-  <circle cx="41" cy="40.7" r="0.95" fill="#ffffff"/>
-  <circle cx="61" cy="40.7" r="0.95" fill="#ffffff"/>
   <path d="M47 49 L53 49 L50 52.2 Z" fill="#3a2420"/>
-  <path d="M47.4 53.6 Q48.7 55 50 53.6 Q51.3 55 52.6 53.6" stroke="#3a2420" stroke-width="1.1" fill="none" stroke-linecap="round"/>
 </svg>
