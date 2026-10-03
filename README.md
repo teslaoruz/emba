@@ -122,7 +122,7 @@ free tier, opencode's free models, or a model running on your own machine with O
 | Open or close | hover the island; click anywhere else or press <kbd>Esc</kbd> to close; `emba toggle` |
 | Allow / deny | click, or press <kbd>Y</kbd> / <kbd>N</kbd> after clicking the island |
 | Ask | click "Ask…", or `emba ask "your question"` |
-| Ask about the screen | the frame icon in the ask box, or `emba look` |
+| Ask about the screen | the frame icon in the ask box, or `emba look`: drag a rectangle, or click a window to take all of it (Hyprland) |
 | Talk | shake the mouse, say "Hey Emba", or `emba listen` |
 | Settings | the gear on the island, right-click it, or `emba settings` |
 | Back | the arrow in the corner returns to the sessions from any other view |

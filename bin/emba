@@ -245,14 +245,28 @@ def voice_ready(py):
     return r.returncode == 0
 
 
+def window_boxes():
+    """Visible Hyprland windows as slurp boxes ("x,y wxh title"), or "" anywhere else."""
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return ""
+    try:
+        run = lambda *a: json.loads(subprocess.run(["hyprctl", *a, "-j"], capture_output=True, text=True, timeout=2).stdout)  # noqa: E731
+        shown = {m["activeWorkspace"]["id"] for m in run("monitors")}
+        return "".join(f"{c['at'][0]},{c['at'][1]} {c['size'][0]}x{c['size'][1]} {c.get('title', '')[:60]}\n"
+                       for c in run("clients") if c.get("mapped") and not c.get("hidden") and c["workspace"]["id"] in shown)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return ""
+
+
 def capture():
     """Let the user drag a rectangle; print the PNG's path (nothing if cancelled)."""
     d = Path(tempfile.gettempdir()) / f"emba-{getpass.getuser()}"
     d.mkdir(exist_ok=True)
     out = d / f"capture-{time.strftime('%Y%m%d-%H%M%S')}.png"
     if SYSTEM == "Linux" and os.environ.get("WAYLAND_DISPLAY") and shutil.which("slurp") and shutil.which("grim"):
-        # slurp reads preset boxes from a non-terminal stdin and would wait on it forever
-        geo = subprocess.run(["slurp"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        # Click a window to take all of it, or drag a rectangle. The windows come
+        # in on stdin; with none, stdin must still be closed or slurp waits on it.
+        geo = subprocess.run(["slurp"], capture_output=True, text=True, input=window_boxes())
         if geo.returncode != 0 or not geo.stdout.strip():
             return
         subprocess.run(["grim", "-g", geo.stdout.strip(), str(out)])
