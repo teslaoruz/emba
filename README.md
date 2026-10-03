@@ -186,8 +186,10 @@ emba plugins [new NAME]  list plugins, or start your own
 ## Plugins
 
 A plugin is a folder with a `plugin.json`. It can run a command when something happens (a session
-finishes, an agent asks for permission…), add buttons, or show its own little panel. Three come
-with Emba: desktop notifications, "open in editor / folder", and a session timer.
+finishes, an agent asks for permission…), add buttons, or show its own little panel. Four come
+with Emba: **GitHub** (checks and the pull request for each session's repository, through the `gh`
+CLI you're already logged in with), desktop notifications, "open in editor / folder", and a session
+timer. Switch them on in Settings → Plugins.
 
 ```sh
 emba plugins new my-plugin   # creates ~/.config/emba/plugins/my-plugin/plugin.json

@@ -1,0 +1,5 @@
+{
+  "name": "GitHub",
+  "description": "Checks and the pull request for each session's repository, through the gh CLI.",
+  "qml": "View.qml"
+}

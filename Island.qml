@@ -1551,7 +1551,7 @@ Item {
                     source: modelData
                     onLoaded: {
                         item.app = App;
-                        item.theme = Theme;
+                        item.theme = root.ui;  // the island's own palette: text dim faint fill fillHover accent error
                     }
                 }
             }

@@ -66,7 +66,9 @@ They show up for the session when it finishes. Placeholders: `{cwd}` `{name}` `{
 
 - `app`: sessions (`app.sessions`), usage (`app.limits`), `app.ask(text, files)`, and more; see
   [`App.qml`](App.qml)
-- `theme`: the current colours (`theme.text`, `theme.dim`, `theme.surface`, `theme.primary`…)
+- `app.pluginData`: a place to keep things between openings (the island rebuilds panels each time
+  it opens); use your plugin's id as the key, e.g. `app.pluginData = Object.assign({}, app.pluginData, {github: repos})`
+- `theme`: the island's colours (`theme.text`, `theme.dim`, `theme.faint`, `theme.fill`, `theme.fillHover`, `theme.accent`, `theme.error`)
 
 ```qml
 import QtQuick

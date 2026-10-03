@@ -949,6 +949,8 @@ Singleton {
                     })))).filter(a => a.argv);
     }
 
+    // somewhere for QML plugins to keep things between openings: pluginData.<plugin id>
+    property var pluginData: ({})
     readonly property var pluginViews: plugins.filter(p => p.qml).map(p => (p.dir.startsWith("/") ? "file://" : "file:///") + `${p.dir}/${p.qml}`.replace(/\\/g, "/"))
 
     // ------------------------------------------------------------------ ipc
