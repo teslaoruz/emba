@@ -207,7 +207,9 @@ Singleton {
             text: ""
         };
         s.cwd = m.cwd || s.cwd || "";
-        s.name = s.cwd.split(/[\\/]/).filter(x => x).pop() || "~";
+        // a session started in the home folder is "~", not the user's name
+        const home = Quickshell.env("HOME") || Quickshell.env("USERPROFILE") || "";
+        s.name = s.cwd.replace(/[\\/]+$/, "") === home.replace(/[\\/]+$/, "") ? "~" : s.cwd.split(/[\\/]/).filter(x => x).pop() || "~";
         s.agent = m.agent || s.agent || "claude";
         s.pid = s.pid || m.pid;
         s.win = m.win || s.win || "";

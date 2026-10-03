@@ -68,6 +68,8 @@ Item {
     // where a session lives, without its own name: /home/me/code/invoices -> ~/code
     readonly property string home: Quickshell.env("HOME") ?? ""
     function where(cwd) {
+        if (home && String(cwd ?? "").replace(/[\\/]+$/, "") === home)
+            return "";  // the home folder: its name "~" says it all
         const parts = String(cwd ?? "").split(/[\\/]/);
         parts.pop();
         const dir = parts.join("/");
