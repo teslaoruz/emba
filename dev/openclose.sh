@@ -1,8 +1,9 @@
 #!/bin/sh
-# Open and close the running Emba from the command line (no mouse) while the
-# corner is recorded at 60 fps, then print where the island's edges were in
-# each frame: a smooth animation moves steadily, a jump shows as a step back
-# or an edge leaving the screen side.
+# Open and close the running Emba from the command line (no mouse) while six
+# grim loops grab the corner (about 40 fps together, each frame named by when
+# it was taken), then print where the island's edges were in each frame: a
+# smooth animation moves steadily, a jump shows as a step back or an edge
+# leaving the side of the screen.
 #   sh dev/openclose.sh [ROUNDS]     -> dev/oc/*.png and a table
 cd "$(dirname "$0")/.."
 read -r W X Y << EOF
@@ -11,13 +12,16 @@ EOF
 R=$((X + W))
 out=$PWD/dev/oc; rm -rf "$out"; mkdir -p "$out"
 python3 bin/emba close > /dev/null; sleep 1.2
-gpu-screen-recorder -w region -region "520x480+$((R - 520))+$Y" -f 60 -o "$out/rec.mp4" > "$out/rec.log" 2>&1 & G=$!
-sleep 1
+touch "$out/.go"
+k=0; while [ $k -lt 6 ]; do
+    (while [ -e "$out/.go" ]; do grim -g "$((R - 520)),$Y 520x480" "$out/$(date +%s%N).png"; done) &
+    k=$((k + 1))
+done
+sleep 0.5
 i=0; while [ $i -lt "${1:-2}" ]; do
     python3 bin/emba open > /dev/null; sleep 1.2
     python3 bin/emba close > /dev/null; sleep 1.2
     i=$((i + 1))
 done
-kill -INT $G; wait $G
-ffmpeg -loglevel error -i "$out/rec.mp4" "$out/%04d.png"
+rm -f "$out/.go"; sleep 0.5
 .venv/bin/python dev/edges.py "$out"

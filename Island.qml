@@ -382,14 +382,17 @@ Item {
     readonly property bool opening: mode === "expanded" || mode === "peek"
     // the two main screens share a tab bar: your sessions, and the chat
     readonly property bool tabbed: ["overview", "empty", "ask", "result"].includes(view)
-    // The window (unscaled): one size, always. Resizing a layer surface pinned
-    // to a screen edge moves its far side, and the compositor shows a frame or
-    // two of the old picture at the new place: the island jumped sideways at
-    // the start and end of every open and close. Outside the island the input
-    // mask lets clicks through, so the size costs nothing but a bigger picture.
-    // ponytail: fixed 480x500 (largest view + flared corners); a resize that
-    // waits for the compositor's configure would be the upgrade if this costs.
-    readonly property size needs: Qt.size(480, 500)
+    // The window (unscaled). A side may only move when the window grows away
+    // from a pinned left or top: resizing from a pinned right or bottom (or
+    // around a centre) moves the window's near side, and the compositor shows a
+    // frame of the old picture at the new place, so the island jumped sideways
+    // at the start and end of every open and close. Those sides stay full size.
+    // The free ones stay snug once settled: a full 480x500 picture costs about
+    // five times the CPU in the busy pill (15% against 3%).
+    readonly property bool resizing: widthAnim.running || heightAnim.running || dragging
+    readonly property size needs: Qt.size(
+        hAlign === 0 && !resizing ? Math.min(480, target.width + 40) : 480,
+        vAlign === 0 && !resizing ? Math.min(500, target.height + 40) : 500)
 
     // A breath for the dots of busy sessions, at the pill's 30 fps.
     property real beat: 0
