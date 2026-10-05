@@ -563,19 +563,21 @@ Singleton {
     // a different helper answers now: an error from the last one no longer applies
     onAskToolChanged: if (!asking)
         askError = ""
+    // the names people know: agents, and the APIs you can chat with
     function toolLabel(t) {
-        return ({ anthropic: "Claude API", openai: "OpenAI", google: "Gemini API" })[t] ?? t;
-    }
-    readonly property string askLabel: ({
+        return ({
             claude: "Claude",
             gemini: "Gemini",
             opencode: "opencode",
             codex: "Codex",
+            agy: "Antigravity",
             ollama: "Ollama",
             anthropic: "Claude API",
             openai: "OpenAI",
             google: "Gemini API"
-        })[askTool] ?? askTool
+        })[t] ?? t;
+    }
+    readonly property string askLabel: toolLabel(askTool)
 
     // the model for each chat tool: cfg.askModels[tool], else the old single askModel
     function modelFor(tool) {

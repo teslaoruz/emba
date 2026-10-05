@@ -68,11 +68,11 @@ approval() { # a request while closed, then Deny; another, then Always
 }
 question() { # a question from Claude: pick an option, Send
     away; sleep 1
-    sh dev/question_test.sh > /dev/null 2>&1 &
+    sh dev/question_test.sh > /dev/null 2>&1 & QT=$!
     sleep 1.3
     rec; to $((R - 230)) $((Y + 118)); sleep 0.3; click; sleep 1.2; keep question-pick
     sheet question-pick $(pick 3)
-    wait
+    wait $QT
 }
 finished() { # work is done: the pop-up, then it goes away by itself
     fake start; emba close; away; sleep 1.5

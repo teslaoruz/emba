@@ -19,6 +19,12 @@ PY = sys.executable
 HOOK = [PY, str(APP / "hook" / "emba-hook")]
 CLI = [PY, str(APP / "bin" / "emba")]
 
+# A separate Emba with its own socket and settings: the one you use keeps running.
+if os.name != "nt" and not os.environ.get("EMBA_SOCKET"):
+    _tmp = tempfile.mkdtemp()
+    os.environ["EMBA_SOCKET"] = os.path.join(_tmp, "emba.sock")
+    os.environ["XDG_CONFIG_HOME"] = _tmp
+
 
 def emba(*args):
     return subprocess.run(CLI + list(args), capture_output=True, text=True, timeout=30).stdout.strip()

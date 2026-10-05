@@ -91,6 +91,7 @@ Singleton {
             energy: energy,
             napping: napping,
             lastFed: lastFed,
+            lastPet: lastPet,
             seen: Date.now()
         });
         mkdir.running = true;
@@ -109,6 +110,7 @@ Singleton {
                 root.energy = s.energy ?? 80;
                 root.napping = !!s.napping;
                 root.lastFed = s.lastFed ?? 0;
+                root.lastPet = s.lastPet ?? 0;
                 // catch up on the time Emba was closed, up to two days
                 root.tick(Math.min(48, Math.max(0, (Date.now() - (s.seen ?? Date.now())) / 3600000)));
             } catch (e) {}

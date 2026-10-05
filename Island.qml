@@ -86,7 +86,7 @@ Item {
     }
     function age(started) {
         const m = Math.max(0, Math.floor((now - started) / 60000));
-        return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+        return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
     }
     readonly property var pending: App.pending
     readonly property var focusSession: sessions[0]
@@ -1227,8 +1227,9 @@ Item {
             visible: ib.kind === "back"
             anchors.fill: parent
 
-            Rectangle { x: 11.5; y: 11.3; width: 8; height: 2; radius: 1; color: ib.ink; rotation: -45; transformOrigin: Item.Left }
-            Rectangle { x: 11.5; y: 16.7; width: 8; height: 2; radius: 1; color: ib.ink; rotation: 45; transformOrigin: Item.Left; anchors.verticalCenterOffset: 0 }
+            // both strokes start from one point (the tip) at the left middle
+            Rectangle { x: 12; y: 14; width: 8; height: 2; radius: 1; color: ib.ink; rotation: -45; transformOrigin: Item.Left }
+            Rectangle { x: 12; y: 14; width: 8; height: 2; radius: 1; color: ib.ink; rotation: 45; transformOrigin: Item.Left }
         }
 
         // gear: eight teeth around a ring
@@ -1551,7 +1552,7 @@ Item {
                                 elide: Text.ElideLeft
                             }
                             Text {
-                                text: srow.modelData.agent ?? "claude"
+                                text: App.toolLabel(srow.modelData.agent ?? "claude")
                                 color: App.agentColour(srow.modelData.agent)
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
@@ -1766,6 +1767,9 @@ Item {
                     id: one
 
                     required property var modelData
+                    // the option under the cursor: its meaning shows before you pick it
+                    property string hoverLabel: ""
+                    readonly property var options: modelData.options ?? []
 
                     Layout.fillWidth: true
                     spacing: 6
@@ -1816,7 +1820,14 @@ Item {
                                     font.weight: Font.Medium
                                     elide: Text.ElideRight
                                 }
-                                HoverHandler { id: oh; cursorShape: qv.req?.answerable ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                                HoverHandler {
+                                    id: oh
+                                    cursorShape: qv.req?.answerable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onHoveredChanged: if (hovered)
+                                        one.hoverLabel = opt.modelData.label;
+                                    else if (one.hoverLabel === opt.modelData.label)
+                                        one.hoverLabel = ""
+                                }
                                 TapHandler {
                                     enabled: !!qv.req?.answerable
                                     onTapped: qv.toggle(one.modelData, opt.modelData.label)
@@ -1824,11 +1835,20 @@ Item {
                             }
                         }
                     }
-                    // what the option you picked means
+                    // what the option under the cursor (or the one you picked) means;
+                    // the line is kept while any option has one, so nothing jumps
                     Dim {
+                        readonly property var shown: one.options.find(o => o.label === one.hoverLabel)
+                            ?? one.options.find(o => (qv.picked[one.modelData.question] ?? []).includes(o.label))
+
                         Layout.fillWidth: true
-                        visible: text !== ""
-                        text: (one.modelData.options ?? []).find(o => (qv.picked[one.modelData.question] ?? []).includes(o.label))?.description ?? ""
+                        // ponytail: two lines kept when a description is long, guessed by length
+                        Layout.minimumHeight: one.options.some(o => (o.description ?? "").length > 55) ? 32 : 16
+                        visible: one.options.some(o => !!o.description)
+                        text: shown?.description ?? "Point at an option to see what it means"
+                        opacity: shown ? 1 : 0.6
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
                         wrapMode: Text.Wrap
                         font.pixelSize: 12
                     }
@@ -2533,10 +2553,11 @@ ToolIcon {
                         lonely: "missed you"
                     }[Pet.need] ?? "is happy")
             }
-            // no buttons and no instructions: rub, double-click, click, hold (see README)
+            // no buttons: rub, double-click, click, hold (see README). One quiet
+            // hint until you have tried rubbing and feeding, so the card isn't a riddle.
             Dim {
-                visible: Pet.napping
-                text: "Click to wake"
+                visible: Pet.napping || !Pet.lastPet || !Pet.lastFed
+                text: Pet.napping ? "Click to wake" : !Pet.lastPet ? "Rub me with the cursor" : "Double-click me for a snack"
             }
         }
     }
