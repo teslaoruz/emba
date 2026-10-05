@@ -163,12 +163,42 @@ Item {
                 root.sfx("listen");
         }
     }
+    // In the island: Qt's hover, or the cursor seen globally. When the island
+    // grows from a right or bottom anchor, Qt keeps the pointer's old local
+    // spot (no new motion arrives) and calls that a leave: the island closed
+    // under a cursor resting in the corner, then reopened on the next nudge.
+    readonly property bool pointerIn: hover.hovered || cursor.inside
+    onPointerInChanged: {
+        if (pointerIn) {
+            leaveTimer.stop();
+            unpeek.stop();
+            autoClose.stop();
+            if (mode === "hidden" || mode === "dots") {
+                peeking = true;
+                panda.wave();
+                openTimer.interval = 650;
+                openTimer.restart();
+            } else if (mode === "compact" || mode === "peek") {
+                // already out (the pill, or saying hi): open a little sooner
+                greetEnd.stop();
+                openTimer.interval = 260;
+                openTimer.restart();
+            }
+        } else {
+            openTimer.stop();
+            closedByKey = false;
+            if (peeking && !open)
+                unpeek.restart();
+            else if (open)
+                leaveTimer.restart();
+        }
+    }
     property string lastMode: "hidden"
     // closed with Esc: don't pop open again under the cursor that is still there
     property bool closedByKey: false
     onModeChanged: {
         // the cursor came back just as the island closed: no new hover arrives, so open it here
-        if (!open && !closedByKey && hover.hovered && (mode === "compact" || mode === "dots")) {
+        if (!open && !closedByKey && pointerIn && (mode === "compact" || mode === "dots")) {
             openTimer.interval = 260;
             openTimer.restart();
         }
@@ -196,7 +226,7 @@ Item {
                 return;
             root.finishedSid = sid;
             root.expandAuto("finished");
-            if (!hover.hovered)
+            if (!root.pointerIn)
                 autoClose.restart();
         }
         function onLimitWarning(window, percent) {
@@ -256,7 +286,7 @@ Item {
         id: autoClose
 
         interval: 5200
-        onTriggered: if (!hover.hovered && !root.pending.length)
+        onTriggered: if (!root.pointerIn && !root.pending.length)
             root.collapse()
     }
     Timer {
@@ -286,7 +316,7 @@ Item {
         id: greetEnd
 
         interval: 2600
-        onTriggered: if (!hover.hovered && !root.open)
+        onTriggered: if (!root.pointerIn && !root.open)
             root.peeking = false
     }
     Timer {
@@ -480,32 +510,6 @@ Item {
 
             HoverHandler {
                 id: hover
-
-                onHoveredChanged: {
-                    if (hovered) {
-                        leaveTimer.stop();
-                        unpeek.stop();
-                        autoClose.stop();
-                        if (root.mode === "hidden" || root.mode === "dots") {
-                            root.peeking = true;
-                            panda.wave();
-                            openTimer.interval = 650;
-                            openTimer.restart();
-                        } else if (root.mode === "compact" || root.mode === "peek") {
-                            // already out (the pill, or saying hi): open a little sooner
-                            greetEnd.stop();
-                            openTimer.interval = 260;
-                            openTimer.restart();
-                        }
-                    } else {
-                        openTimer.stop();
-                        root.closedByKey = false;
-                        if (root.peeking && !root.open)
-                            unpeek.restart();
-                        else if (root.open)
-                            leaveTimer.restart();
-                    }
-                }
             }
 
             // Notices any click on the island (to arm Y / N) without taking it:
@@ -1002,7 +1006,7 @@ Item {
             panda.emote("happy", 1);
         else
             panda.emote("annoyed", 0.8);
-        if (pending.length === 0 && !hover.hovered)
+        if (pending.length === 0 && !pointerIn)
             leaveTimer.restart();
     }
 
@@ -1013,6 +1017,8 @@ Item {
         id: cursor
 
         property var gaze: null
+        // over the island, by the global position (see pointerIn)
+        property bool inside: false
         readonly property bool hostCursor: typeof Quickshell.cursorPos === "function"
         // shaking to talk needs the cursor even while the island is hidden
         readonly property bool wanted: ((App.cfg.trackCursor ?? true) && root.mode !== "hidden") || (!!App.cfg.voice && !!App.cfg.voiceShake)
@@ -1022,6 +1028,9 @@ Item {
             // mapToItem(null) is already in window pixels, scale included
             const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
             gaze = Qt.point(x - root.origin.x - c.x, y - root.origin.y - c.y);
+            const tl = shape.mapToItem(null, 0, 0), br = shape.mapToItem(null, shape.width, shape.height);
+            const lx = x - root.origin.x, ly = y - root.origin.y;
+            inside = lx >= tl.x && lx < br.x + 1 && ly >= tl.y && ly < br.y + 1;
             if (App.cfg.voice && App.cfg.voiceShake)
                 shake(x);
         }
@@ -1087,7 +1096,7 @@ Item {
             hypr.connected = true;
         }
         onRunningChanged: if (!running)
-            cursor.gaze = null
+            cursor.gaze = null, cursor.inside = false
     }
 
     Timer {
@@ -1099,7 +1108,7 @@ Item {
             cursor.aim(p.x, p.y);
         }
         onRunningChanged: if (!running)
-            cursor.gaze = null
+            cursor.gaze = null, cursor.inside = false
     }
 
     // clipboard that works on every host

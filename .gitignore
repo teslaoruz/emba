@@ -15,3 +15,6 @@ dev/pk/
 dev/micrec*/
 dev/*.wav
 dev/*.out
+dev/sr/
+dev/ut/
+dev/sr-*.png
