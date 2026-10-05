@@ -40,6 +40,24 @@ Item {
     property string finishedSid: ""
     property var files: []
     property bool dragging: false
+    // a heads-up (App.notice): shown in the pill, then gone
+    property string note: ""
+    Timer {
+        id: noteEnd
+
+        interval: 6000
+        onTriggered: root.note = ""
+    }
+    Connections {
+        target: App
+
+        function onHeadsUp(text, mood) {
+            root.note = text;
+            noteEnd.restart();
+            if (mood)
+                panda.emote(mood, 2);
+        }
+    }
     property string petNote: ""
     property real tossX: 400
 
@@ -95,7 +113,7 @@ Item {
     // tucks away into its corner until the mouse comes looking.
     readonly property bool busy: pending.length > 0 || sessions.some(s => ["working", "thinking", "waiting", "done"].includes(s.state))
     readonly property bool dancing: !!App.music && App.cfg.danceToMusic !== false
-    readonly property string mode: open || dragging ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dancing || !App.cfg.hideWhenIdle) ? "compact" : sessions.length ? "dots" : "hidden"
+    readonly property string mode: open || dragging ? "expanded" : (peeking || App.voiceState !== "") ? "peek" : (busy || dancing || note !== "" || !App.cfg.hideWhenIdle) ? "compact" : sessions.length ? "dots" : "hidden"
     readonly property string view: {
         if (dragging)
             return "drop";
@@ -843,7 +861,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, 190)
                     elide: Text.ElideRight
-                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.busy && root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : root.dancing ? `♪ ${App.music}` : root.focusSession?.name ?? ""
+                    text: root.pending.length ? `${root.pending[0].name} needs you` : root.dragging ? "Drop it on Emba" : root.note ? root.note : root.busy && root.focusSession ? (root.plain(root.focusSession.ticker.slice(-1)[0]) || root.focusSession.name) : root.dancing ? `♪ ${App.music}` : root.focusSession?.name ?? ""
                     color: root.pending.length ? root.ui.accent : root.ui.text
                     font.pixelSize: 12
                     font.weight: Font.Medium
@@ -1100,6 +1118,8 @@ Item {
     Socket {
         id: hypr
 
+        property int waited: 0
+
         path: root.hyprSocket
         onConnectedChanged: if (connected) {
             write("cursorpos");
@@ -1120,9 +1140,16 @@ Item {
         running: cursor.wanted && !cursor.hostCursor && root.hyprSocket !== ""
         interval: root.mode === "expanded" || root.mode === "peek" ? 70 : 110
         repeat: true
+        // One question per connection: Hyprland hangs up after answering. Never
+        // close and reopen in the same instant, as this did ten times a second:
+        // now and then Qt's socket notifier lost the race and Quickshell crashed.
         onTriggered: {
-            hypr.connected = false;
-            hypr.connected = true;
+            if (!hypr.connected) {
+                hypr.waited = 0;
+                hypr.connected = true;
+            } else if (++hypr.waited > 20) {
+                hypr.connected = false;  // no answer for ~2 s: drop it, ask again next tick
+            }
         }
         onRunningChanged: if (!running)
             cursor.gaze = null, cursor.inside = false

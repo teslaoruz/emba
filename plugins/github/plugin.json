@@ -1,5 +1,6 @@
 {
   "name": "GitHub",
-  "description": "Checks and the pull request for each session's repository, through the gh CLI.",
-  "qml": "View.qml"
+  "description": "Checks and the pull request for each session's repository, reviews waiting for you, and a heads-up when checks finish. Uses the gh CLI.",
+  "qml": "View.qml",
+  "poll": { "every": 60, "run": ["{python}", "{plugin}/status.py"] }
 }

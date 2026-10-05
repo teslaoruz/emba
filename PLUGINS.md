@@ -8,7 +8,7 @@ A plugin is a folder with a `plugin.json` in it:
 Start one with `emba plugins new my-plugin`, then turn it on in **Settings → Plugins**.
 Emba picks up changes the next time settings are opened or Emba restarts.
 
-A plugin can do any mix of three things.
+A plugin can do any mix of four things.
 
 ## 1. Run a command when something happens
 
@@ -83,6 +83,23 @@ Text {
 ```
 
 [`plugins/session-timer`](plugins/session-timer) is a complete example.
+
+## 4. Look in on something in the background
+
+```json
+"poll": { "every": 60, "run": ["{python}", "{plugin}/status.py"] }
+```
+
+Emba runs it every `every` seconds (15 at least), also while the island is closed. `{python}` is
+Emba's own Python (with `keyring`, for keys saved in Settings), `{plugin}` the plugin's folder, and
+`$EMBA_DIRS` the folders your sessions run in, one per line. Each line it prints is JSON:
+
+- `{"data": ...}`: kept as `app.pluginData.<plugin id>` for your panel to show
+- `{"notice": "Checks failed on shop", "mood": "annoyed"}`: a heads-up in the pill for a few
+  seconds, with Emba's face to match (`happy`, `surprised`, `annoyed`, `love`, `dizzy`, or none)
+
+Print a notice only when something changed (keep what you saw last in a cache file), or Emba will
+say the same thing every minute. [`plugins/github`](plugins/github) does all of this.
 
 ## Sharing
 

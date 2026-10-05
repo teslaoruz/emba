@@ -1,61 +1,41 @@
 // GitHub, for the repositories your sessions run in: the latest CI run on the
-// current branch and its pull request. Uses the `gh` CLI you're logged in with;
-// click a line to open it on GitHub. Refreshes every minute while it is shown.
+// current branch and its pull request, and the pull requests waiting for your
+// review. Emba fetches it in the background every minute (status.py, plugin.json
+// "poll"); click a line to open it on GitHub.
 import QtQuick
-import Quickshell.Io
 
 Column {
     id: gh
 
     property var app
     property var theme
-    property var repos: []
-    property var incoming: []
+    readonly property var info: app?.pluginData?.github ?? {}
+    readonly property var repos: info.repos ?? []
+    readonly property var reviews: info.reviews ?? []
 
-    readonly property string script: Qt.resolvedUrl("status.py").toString().replace(/^file:\/\//, "").replace(/^\/([A-Za-z]:)/, "$1")
-    readonly property var dirs: [...new Set((app?.sessions ?? []).map(s => s.cwd).filter(d => d))]
-
-    visible: repos.length > 0
+    visible: repos.length > 0 || reviews.length > 0
     width: parent ? parent.width : 300
     spacing: 4
 
-    function refresh() {
-        if (!dirs.length || proc.running)
-            return;
-        incoming = [];
-        proc.command = [app?.python ?? "python3", script].concat(dirs);
-        proc.running = true;
-    }
-    // the last answer shows at once (the island rebuilds this panel each time it opens)
-    onAppChanged: if (app?.pluginData?.github)
-        repos = app.pluginData.github
-    Component.onCompleted: refresh()
-    onDirsChanged: refresh()
+    // reviews waiting for you, all repositories together: one line
+    Rectangle {
+        visible: gh.reviews.length > 0
+        width: gh.width
+        height: 32
+        radius: 12
+        color: revh.hovered ? gh.theme.fillHover : gh.theme.fill
 
-    Timer {
-        running: gh.visible || gh.dirs.length > 0
-        interval: 60000
-        repeat: true
-        onTriggered: gh.refresh()
-    }
-
-    Process {
-        id: proc
-
-        stdout: SplitParser {
-            onRead: line => {
-                try {
-                    gh.incoming = gh.incoming.concat([JSON.parse(line)]);
-                } catch (e) {}
-            }
+        Text {
+            x: 12
+            width: parent.width - 24
+            anchors.verticalCenter: parent.verticalCenter
+            text: gh.reviews.length === 1 ? `Review waiting: ${gh.reviews[0].title}` : `${gh.reviews.length} pull requests waiting for your review`
+            color: gh.theme.text
+            font.pixelSize: 12
+            elide: Text.ElideRight
         }
-        onExited: {
-            gh.repos = gh.incoming;
-            if (gh.app)
-                gh.app.pluginData = Object.assign({}, gh.app.pluginData, {
-                    github: gh.repos
-                });
-        }
+        HoverHandler { id: revh; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: Qt.openUrlExternally(gh.reviews.length === 1 ? gh.reviews[0].url : "https://github.com/pulls/review-requested") }
     }
 
     Repeater {

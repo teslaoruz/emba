@@ -114,6 +114,10 @@ def use_quickshell():
 
 def host_command():
     if use_quickshell():
+        # Hyprland hangs up after each cursor question (10 a second): Quickshell would log
+        # every one, ~860k lines a day into the journal and a log file kept in RAM
+        rules = os.environ.get("QT_LOGGING_RULES", "")
+        os.environ["QT_LOGGING_RULES"] = ";".join(x for x in (rules, "quickshell.io.socket.warning=false") if x)
         return ["qs", "-p", str(APP)]
     py = venv_python()  # the one with PySide6
     if SYSTEM == "Windows" and py.lower().endswith("python.exe"):
@@ -247,7 +251,9 @@ def venv_python():
 
 
 def voice_ready(py):
-    r = subprocess.run([py, "-c", "import faster_whisper, sounddevice, piper"], capture_output=True)
+    # installed, not imported: importing them took seconds, and everything waits on status
+    find = "import importlib.util as u, sys; sys.exit(not all(u.find_spec(m) for m in ('faster_whisper', 'sounddevice', 'piper')))"
+    r = subprocess.run([py, "-c", find], capture_output=True)
     return r.returncode == 0
 
 

@@ -41,6 +41,8 @@ class Ntfy(BaseHTTPRequestHandler):
 def check(ok, what):
     print(("ok    " if ok else "FAIL: ") + what)
     if not ok:
+        if "tmp" in globals():  # the hidden Emba's own words
+            print("\n".join(x for x in open(f"{tmp}/host.log").read().splitlines() if "window masks" not in x)[-1500:])
         sys.exit(1)
 
 
@@ -103,8 +105,8 @@ os.makedirs(f"{tmp}/emba")
 json.dump({"phone": True, "phoneDelay": 0.3, "phoneServer": env["EMBA_NTFY"], "plugins": []},
           open(f"{tmp}/emba/config.json", "w"))
 henv = dict(env, XDG_CONFIG_HOME=tmp, EMBA_SOCKET=f"{tmp}/emba.sock", QT_QPA_PLATFORM="offscreen")
-host = subprocess.Popen([sys.executable, str(APP / "desktop" / "host.py")], env=henv,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+log = open(f"{tmp}/host.log", "w")
+host = subprocess.Popen([sys.executable, str(APP / "desktop" / "host.py")], env=henv, stdout=log, stderr=log)
 try:
     hook = [sys.executable, str(APP / "hook" / "emba-hook")]
     for _ in range(60):  # up, and its status (which python has keyring) known

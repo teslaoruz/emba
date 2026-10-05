@@ -675,6 +675,8 @@ Item {
     // false where Emba is tiny (the pill): a steady 30 fps timer instead of
     // every display refresh, so the render loop can sleep between frames
     property bool smooth: true
+    // the pill's pace while moving: 34 px of Emba reads fine at 15 fps
+    property int pillInterval: 66
     // seconds Emba has been animating: other things can keep time with it
     readonly property real clock: p.t
 
@@ -694,7 +696,7 @@ Item {
     }
     Timer {
         running: root.running && (!root.moving || !root.smooth)
-        interval: root.moving ? 33 : 100
+        interval: root.moving ? root.pillInterval : 100
         repeat: true
         onTriggered: root.advance()
     }

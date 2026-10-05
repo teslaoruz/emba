@@ -1,5 +1,6 @@
 pragma Singleton
 
+import QtQml
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -156,6 +157,13 @@ Singleton {
     signal finished(string sid)
     signal permissionAsked
     signal limitWarning(string window, int percent)
+    // a short line in the pill for a few seconds, from a plugin or an integration
+    // (checks failed, a meeting soon, new mail); mood: an Emba face, or ""
+    signal headsUp(string text, string mood)
+    function notice(text, mood) {
+        if (text)
+            headsUp(String(text).slice(0, 80), mood ?? "");
+    }
 
     // one colour per agent, so their sessions are told apart at a glance
     readonly property var agentColours: ({
@@ -445,6 +453,8 @@ Singleton {
                 } catch (e) {}
                 rivalTimer.stop();
                 probe.connected = false;
+                if (root.listening)
+                    return;  // the socket is already ours: whoever answered was us
                 if (root.myPid && pid === root.myPid) {
                     root.listening = true;  // ourselves, from before a reload: take over
                 } else {
@@ -462,6 +472,11 @@ Singleton {
 
         interval: 1000
         onTriggered: {
+            // once the socket is ours there's no rival: after a crash Quickshell starts
+            // Emba again, finds the dead copy's socket file, takes it, and the probe's
+            // late check must not send this copy away (Emba used to vanish here)
+            if (root.listening)
+                return;
             console.log("emba: already running, leaving");
             root.leave();
         }
@@ -1015,10 +1030,66 @@ Singleton {
     readonly property string osKey: Qt.platform.os === "osx" ? "darwin" : Qt.platform.os
 
     function pluginArgv(spec, vars) {
-        const argv = Array.isArray(spec) ? spec : spec?.[osKey];
-        if (!Array.isArray(argv) || !argv.length)
+        // a list, or one per system; lists may arrive as Qt sequences (not JS arrays)
+        const list = x => x && typeof x !== "string" && typeof x.length === "number" ? Array.from(x) : null;
+        const argv = list(spec) ?? list(spec?.[osKey]);
+        if (!argv?.length)
             return null;
         return argv.map(a => String(a).replace(/\{(\w+)\}/g, (all, k) => k in vars ? String(vars[k] ?? "") : all));
+    }
+
+    // ---- plugins that look in on something in the background ----
+    // plugin.json "poll": {"every": SECONDS, "run": [argv]} runs every so often,
+    // also while the island is closed. Each line it prints is JSON:
+    //   {"data": ...}               kept for its panel as app.pluginData.<id>
+    //   {"notice": "...", "mood"?}  a heads-up in the pill (moods: happy, surprised, annoyed...)
+    // $EMBA_DIRS: the folders the sessions run in, one per line.
+    readonly property var pollers: plugins.filter(p => p.poll && pluginArgv(p.poll.run, { plugin: p.dir, python: "" }))
+    function pollLine(id, line) {
+        let m;
+        try {
+            m = JSON.parse(line);
+        } catch (e) {
+            return;
+        }
+        if (!m || typeof m !== "object")
+            return;
+        if ("data" in m)
+            pluginData = Object.assign({}, pluginData, { [id]: m.data });
+        if (typeof m.notice === "string")
+            notice(m.notice, typeof m.mood === "string" ? m.mood : "");
+    }
+    Instantiator {
+        model: root.pollers
+
+        delegate: Timer {
+            id: poller
+
+            required property var modelData
+            property Process proc: Process {
+                stdout: SplitParser {
+                    onRead: line => root.pollLine(poller.modelData.id, line)
+                }
+            }
+
+            interval: Math.max(15, Number(modelData.poll.every) || 60) * 1000
+            running: true
+            repeat: true
+            triggeredOnStart: true
+            onTriggered: {
+                const argv = root.pluginArgv(modelData.poll.run, {
+                    plugin: modelData.dir,
+                    python: root.status.python || root.python
+                });
+                if (proc.running || !argv)
+                    return;
+                proc.command = argv;
+                proc.environment = {
+                    EMBA_DIRS: [...new Set(root.sessions.map(x => x.cwd).filter(d => d))].join("\n")
+                };
+                proc.running = true;
+            }
+        }
     }
 
     function fire(event, vars) {
