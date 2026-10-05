@@ -23,6 +23,10 @@ Singleton {
             hideWhenIdle: true,      // only a small nub while nothing runs
             danceToMusic: true,      // pop out and dance while music plays
             tray: true,              // an icon in the system tray (Open, Settings, Quit)
+            phone: false,            // requests that wait for you go to your phone (ntfy)
+            phoneServer: "https://ntfy.sh",
+            phoneDelay: 20,          // seconds a request waits at the desk first
+            phoneDone: false,        // also tell the phone when a session finishes
             sounds: false,           // little sound effects (off until the set is chosen)
             soundVolume: 0.5,
             autoOpenOnPermission: true,
@@ -281,6 +285,8 @@ Singleton {
             s.state = "done";
             s.text = m.text ?? "";
             root.finished(m.sid);
+            if (cfg.phoneDone)
+                toPhone(null, { name: s.name, text: s.text || "Finished." });
             root.fire("finished", {
                 name: s.name,
                 cwd: s.cwd,
@@ -307,6 +313,7 @@ Singleton {
                     sock: sock
                 }]);
             sock.pendingId = m.id;
+            root.toPhone(pending[pending.length - 1]);
             root.permissionAsked();
             root.fire("permission", {
                 name: s.name,
@@ -328,6 +335,7 @@ Singleton {
         if (!req)
             return;
         pending = pending.filter(p => p !== req);
+        root.toPhone(null, null, id);
         if (req.sock?.connected) {
             req.sock.write(JSON.stringify({
                 behavior: behavior,
@@ -350,6 +358,8 @@ Singleton {
         if (!gone.length)
             return;
         pending = pending.filter(p => !gone.includes(p));
+        for (const p of gone)
+            root.toPhone(null, null, p.id);
         for (const p of gone)
             if (p.sock?.connected)
                 p.sock.connected = false;
@@ -1049,6 +1059,92 @@ Singleton {
         id: trayProc
     }
 
+    // ---- your phone: phone/phone.py over ntfy. A request still waiting after
+    // phoneDelay seconds goes there with buttons; a tap comes back as an answer.
+    // ($EMBA_PHONE_TOPIC stands in for the keyring in tests/test_phone.py)
+    readonly property bool phoneWanted: !!cfg.phone && (!!keysSet.phone || !!Quickshell.env("EMBA_PHONE_TOPIC")) && !!status.python
+    // a change of server or delay restarts it too
+    readonly property string phoneSetup: phoneWanted ? `${cfg.phoneServer}|${cfg.phoneDelay}` : ""
+    onPhoneSetupChanged: restartPhone()
+    function restartPhone() {
+        phoneProc.running = false;
+        if (!phoneWanted)
+            return;
+        phoneProc.command = [status.python, `${Quickshell.shellDir}/phone/phone.py`];
+        phoneProc.environment = {
+            EMBA_NTFY: cfg.phoneServer || "https://ntfy.sh",
+            EMBA_PHONE_DELAY: String(cfg.phoneDelay ?? 20)
+        };
+        phoneProc.running = true;
+    }
+    // ask: a new request (gets a one-time nonce the answer must carry); done: a
+    // finished session; gone: answered here, so the phone needn't hear of it
+    function toPhone(req, done, gone) {
+        if (!phoneProc.running)
+            return;
+        let m = null;
+        if (req) {
+            const q = req.questions ?? [];
+            // the phone can take a permission, or one plain question with a few answers
+            if (q.length && !(req.answerable && q.length === 1 && !q[0].multi && (q[0].options ?? []).length))
+                return;
+            // ponytail: Math.random nonce; the secret topic is the real lock, this only stops stale taps
+            req.nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+            m = { ask: { id: req.id, nonce: req.nonce, name: req.name, agent: req.agent, tool: req.tool,
+                         command: q.length ? q[0].question : req.full,
+                         options: q.length ? q[0].options.map(o => o.label) : [] } };
+        } else if (done)
+            m = { done: done };
+        else if (gone)
+            m = { gone: gone };
+        if (m)
+            phoneProc.write(JSON.stringify(m) + "\n");
+    }
+    // the topic, for Settings to show (it's yours; the keyring hands it over on request)
+    property string phoneTopic: ""
+    function loadPhoneTopic() {
+        if (keysSet.phone && !phoneTopicProc.running)
+            phoneTopicProc.running = true;
+    }
+    onKeysSetChanged: keysSet.phone ? loadPhoneTopic() : phoneTopic = ""
+    Process {
+        id: phoneTopicProc
+
+        command: [root.python, root.emba, "key", "get", "phone"]
+        stdout: StdioCollector {
+            onStreamFinished: root.phoneTopic = text.trim()
+        }
+    }
+    Process {
+        id: phoneProc
+
+        stdinEnabled: true
+        stdout: SplitParser {
+            onRead: line => {
+                let a;
+                try {
+                    a = JSON.parse(line);
+                } catch (e) {
+                    return;
+                }
+                const req = root.pending.find(p => p.id === a.id && p.nonce && p.nonce === a.nonce);
+                if (!req || !["allow", "deny"].includes(a.behavior))
+                    return;
+                const q = req.questions ?? [];
+                root.decide(req.id, a.behavior, false, q.length && typeof a.answer === "string" ? { [q[0].question]: a.answer } : undefined);
+            }
+        }
+        // the helper died (network gone for good, no keyring): try again in a while
+        onExited: if (root.phoneWanted)
+            phoneRetry.restart()
+    }
+    Timer {
+        id: phoneRetry
+
+        interval: 60000
+        onTriggered: root.restartPhone()
+    }
+
     // ---- integration keys, kept in the system keyring (hook/keys.py) ----
     property var keysSet: ({})  // {name: true} for every key that is there; never the keys
     function refreshKeys() {
@@ -1168,6 +1264,8 @@ Singleton {
                 root.setCfg({
                     [key]: v
                 });
+                if (key === "phone")  // `emba phone setup` has just put the topic in the keyring
+                    root.refreshKeys();
                 return "ok";
             }
         case "pid":

@@ -11,7 +11,7 @@ import os
 import sys
 
 SERVICE = "emba"
-NAMES = ["vercel", "stripe", "resend", "calcom", "notion", "n8n", "n8n-url", "anthropic", "openai", "google"]
+NAMES = ["vercel", "stripe", "resend", "calcom", "notion", "n8n", "n8n-url", "anthropic", "openai", "google", "phone"]
 
 
 def keyring():

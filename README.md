@@ -195,6 +195,21 @@ emba plugins [new NAME]  list plugins, or start your own
 
 </details>
 
+## On your phone
+
+Away from the desk? When an agent has waited for you a while (20 seconds by default), Emba sends a
+notification to your phone with **Allow** and **Deny**, or with the answers to a question. Tap
+one and the agent carries on. It goes through [ntfy](https://ntfy.sh): free, no account.
+
+1. Install the ntfy app (Android or iPhone).
+2. Settings → Phone → switch it on (or run `emba phone setup`), and subscribe to the topic it shows.
+3. `emba phone test` sends a hello.
+
+The topic is a long random name kept in your system keyring; anyone who has it could answer for you,
+so keep it to yourself (`emba phone new` replaces it). Every request also carries a one-time code,
+so an old or made-up tap answers nothing. Messages pass through ntfy.sh unless you set your own
+ntfy server in Settings.
+
 ## Plugins
 
 A plugin is a folder with a `plugin.json`. It can run a command when something happens (a session
@@ -217,8 +232,9 @@ See **[PLUGINS.md](PLUGINS.md)** for everything a plugin can do.
   Nothing is ever approved by accident.
 - Keyboard shortcuts only work after you click the island, so typing in a terminal can't approve
   something by mistake.
-- No telemetry, no accounts, no keys. Emba talks to your agents over a local socket only your user
-  can open. Voice runs entirely on your computer.
+- No telemetry, no accounts. Emba talks to your agents over a local socket only your user can open.
+  Voice runs entirely on your computer. Nothing leaves it unless you switch something on: phone
+  notifications (through ntfy), an integration key, or chat with an API.
 
 ## Troubleshooting
 

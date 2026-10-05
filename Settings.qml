@@ -463,6 +463,74 @@ Rectangle {
                 }
             }
 
+            // ---- phone: requests that wait for you, with buttons, through ntfy ----
+            Section { text: "Phone" }
+
+            Card {
+                Toggle {
+                    text: "Send waiting requests to my phone"
+                    hint: `when an agent has waited ${App.cfg.phoneDelay ?? 20} s, with Allow and Deny`
+                    checked: !!App.cfg.phone && !!App.keysSet.phone
+                    onToggled: on => on && !App.keysSet.phone ? App.run(["phone", "setup"]) : App.setCfg({ phone: on })
+                }
+                Text {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    Layout.fillWidth: true
+                    text: "Install the ntfy app on your phone and subscribe to this topic. Keep it to yourself: anyone who has it can answer for you."
+                    color: Theme.faint
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                Command {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    text: App.phoneTopic
+                }
+                Labelled {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    text: "Send after"
+                    Segmented {
+                        options: [["10 s", 10], ["20 s", 20], ["1 min", 60], ["5 min", 300]]
+                        value: App.cfg.phoneDelay ?? 20
+                        onPicked: v => App.setCfg({ phoneDelay: v })
+                    }
+                }
+                Toggle {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    indent: true
+                    text: "Also when a session finishes"
+                    checked: !!App.cfg.phoneDone
+                    onToggled: on => App.setCfg({ phoneDone: on })
+                }
+                Text {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    Layout.fillWidth: true
+                    text: `Messages go through ${(App.cfg.phoneServer || "https://ntfy.sh").replace("https://", "")}. Your own ntfy server instead:`
+                    color: Theme.faint
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                KeyField {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    secret: false
+                    hint: "https://ntfy.example.com"
+                    onSaved: v => /^https:\/\/[^\s]+$/.test(v.trim()) && App.setCfg({ phoneServer: v.trim().replace(/\/+$/, "") })
+                }
+                RowLayout {
+                    visible: !!App.keysSet.phone && !!App.cfg.phone
+                    spacing: 14
+
+                    Link {
+                        text: App.busy ? "sending…" : "send a test"
+                        onClicked: App.run(["phone", "test"])
+                    }
+                    Link {
+                        text: "new topic"
+                        // the old one stops working: for when it leaked
+                        onClicked: App.run(["phone", "new"])
+                    }
+                }
+            }
+
             // ---- integrations: a key each, kept in the system keyring ----
             Section { text: "Integrations" }
 

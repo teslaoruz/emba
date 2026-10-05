@@ -25,6 +25,8 @@ usage: emba [command]
   models TOOL           the models a chat tool offers (JSON)
   key set|delete NAME   an integration's API key, kept in the system keyring
                         (set reads it from $EMBA_KEY, never the command line)
+  phone setup|test|new|off
+                        requests that wait for you go to your phone (ntfy)
   email FILE...         a new email with these files attached
   terminal DIR CMD...   open your terminal in DIR running CMD
   voice-install         download the local speech models (free, ~250 MB)
@@ -275,6 +277,41 @@ def keys(args):
     if args[:2] == ["set", "anthropic"] and subprocess.run([py, "-c", "import anthropic"], capture_output=True).returncode != 0:
         subprocess.run([py, "-m", "pip", "install", "--quiet", "anthropic"], check=True)
     return subprocess.run([py, str(APP / "hook" / "keys.py")] + list(args)).returncode
+
+
+def phone(args):
+    """setup: a private ntfy topic in the keyring, and the link to follow on your phone.
+    test: one notification. off: forget the topic (the phone stops getting anything)."""
+    op = args[0] if args else "setup"
+    py = venv_python()
+    if op == "off":
+        keys(["delete", "phone"])
+        ipc("set", "phone", "false") if running() else None
+        return print("phone notifications off")
+    if op == "new":  # the old topic leaked: it stops working, subscribe to the new one
+        keys(["delete", "phone"])
+    if subprocess.run([py, str(APP / "hook" / "keys.py"), "get", "phone"], capture_output=True, text=True).stdout.strip() == "":
+        import secrets
+        os.environ["EMBA_KEY"] = "emba-" + secrets.token_urlsafe(24)  # the only lock on it: keep it long
+        try:
+            keys(["set", "phone"])
+        finally:
+            os.environ.pop("EMBA_KEY", None)
+    try:
+        server = json.loads((emba_config_dir() / "config.json").read_text()).get("phoneServer") or "https://ntfy.sh"
+    except (OSError, ValueError):
+        server = "https://ntfy.sh"
+    env = dict(os.environ, EMBA_NTFY=server)
+    if op == "test":
+        return subprocess.run([py, str(APP / "phone" / "phone.py"), "test"], env=env).returncode
+    topic = subprocess.run([py, str(APP / "hook" / "keys.py"), "get", "phone"], capture_output=True, text=True).stdout.strip()
+    print("1. Install the ntfy app on your phone (Android or iPhone).")
+    print(f"2. In it, subscribe to this topic on {server}:\n\n   {topic}\n")
+    print("   Keep it to yourself: anyone with it can see and answer your requests.")
+    print("3. Run `emba phone test`: a hello should arrive.")
+    if running():
+        ipc("set", "phone", "true")
+    return 0
 
 
 def models(tool):
@@ -579,6 +616,8 @@ def main():
         voice_remove()
     elif cmd == "key" and rest:
         sys.exit(keys(rest))
+    elif cmd == "phone" and rest[:1] in ([], ["setup"], ["test"], ["new"], ["off"]):
+        sys.exit(phone(rest))
     elif cmd == "models" and rest:
         print(json.dumps(models(rest[0])))
     elif cmd == "email" and rest:

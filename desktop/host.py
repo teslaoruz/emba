@@ -233,6 +233,14 @@ class Process(QObject):
 
     running = Property(bool, _get_running, _set_running, notify=runningChanged)
 
+    # as Quickshell: stdin is open while it runs, write() sends text to it
+    stdinEnabled = Property(bool, lambda self: True, lambda self, on: None)
+
+    @Slot(str)
+    def write(self, text):
+        if self._proc is not None:
+            self._proc.write(text.encode())
+
     def _start(self):
         program = shutil.which(self._command[0]) or self._command[0]
         p = QProcess(self)
