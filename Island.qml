@@ -322,8 +322,12 @@ Item {
     Timer {
         id: leaveTimer
 
-        // an empty ask box gets a little longer: you may be reaching for the keyboard
-        interval: root.view === "ask" ? 3000 : (App.cfg.collapseDelay ?? 1200)
+        // Only hovered open: it goes almost as soon as you leave, so a click
+        // outside closes it at once. (Hyprland's click-outside grab would take
+        // the keyboard from the app you're typing in, so it waits for a click
+        // inside.) Clicked open: a little grace, more for an empty ask box,
+        // as you may be reaching for the keyboard.
+        interval: !root.userOpened ? 350 : root.view === "ask" ? 3000 : (App.cfg.collapseDelay ?? 1200)
         onTriggered: if (!root.sticky)
             root.collapse()
     }
