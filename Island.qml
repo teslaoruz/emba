@@ -382,11 +382,14 @@ Item {
     readonly property bool opening: mode === "expanded" || mode === "peek"
     // the two main screens share a tab bar: your sessions, and the chat
     readonly property bool tabbed: ["overview", "empty", "ask", "result"].includes(view)
-    // How much window the island needs right now (unscaled): all of it while
-    // it changes size, just its own shape plus room for the flared corners
-    // once it has settled. A smaller window is a smaller picture to redraw
-    // every frame, which is most of what animating costs.
-    readonly property size needs: widthAnim.running || heightAnim.running || dragging ? Qt.size(480, 380) : Qt.size(Math.min(480, target.width + 40), Math.min(380, target.height + 40))
+    // The window (unscaled): one size, always. Resizing a layer surface pinned
+    // to a screen edge moves its far side, and the compositor shows a frame or
+    // two of the old picture at the new place: the island jumped sideways at
+    // the start and end of every open and close. Outside the island the input
+    // mask lets clicks through, so the size costs nothing but a bigger picture.
+    // ponytail: fixed 480x500 (largest view + flared corners); a resize that
+    // waits for the compositor's configure would be the upgrade if this costs.
+    readonly property size needs: Qt.size(480, 500)
 
     // A breath for the dots of busy sessions, at the pill's 30 fps.
     property real beat: 0
@@ -878,7 +881,9 @@ Item {
 
                 x: 98
                 y: root.tabbed ? 58 : 18
-                width: shape.width - 98 - (cornerButton.visible && !root.tabbed ? 52 : 22)
+                // the open width, not the moving one: text that rewraps as the
+                // island grows would change its target height mid-animation
+                width: 460 - 98 - (cornerButton.visible && !root.tabbed ? 52 : 22)
                 active: root.mode === "expanded"
                 // in once the island is nearly open (never squeezed into a small one), out at once
                 opacity: root.mode === "expanded" && shape.height >= Math.min(root.target.height, 132) * 0.85 ? 1 : 0

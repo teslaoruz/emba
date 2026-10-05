@@ -18,3 +18,5 @@ dev/*.out
 dev/sr/
 dev/ut/
 dev/sr-*.png
+dev/oc/
+dev/oc.txt
