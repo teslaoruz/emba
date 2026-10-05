@@ -231,7 +231,7 @@ See **[PLUGINS.md](PLUGINS.md)** for everything a plugin can do.
 - **The island is in the wrong place.** Pick a corner in Settings → Where.
 - **Opening and closing slide, fade or jump (Hyprland).** Hyprland animates layers on top of
   Emba's own animation. Turn that off for Emba's layer:
-  `layerrule = noanim, emba` (hyprlang), or
+  `layerrule = no_anim true, match:namespace emba` (hyprland.conf), or
   `hl.layer_rule({ match = { namespace = "emba" }, no_anim = true })` (Lua config), then `hyprctl reload`.
 - **Still stuck?** [Open an issue](https://github.com/teslaoruz/emba/issues) with the output of
   `emba doctor`.
