@@ -386,7 +386,10 @@ Item {
     // of a wrong picture (moved sideways, or cut short), so the window only
     // changes size while the island is tucked away and nothing of it shows:
     // full size whenever any of it is out, a small corner once it has hidden.
-    readonly property bool tucked: mode === "hidden" && !widthAnim.running && !heightAnim.running && !dragging
+    // hidden, and the island has really shrunk there: the animations have not
+    // started yet in the instant the mode changes, so "not running" is not enough
+    readonly property bool tucked: mode === "hidden" && !dragging && !widthAnim.running && !heightAnim.running
+        && Math.abs(shape.width - target.width) < 1 && Math.abs(shape.height - target.height) < 1
     readonly property size needs: tucked ? Qt.size(target.width + 40, target.height + 40) : Qt.size(480, 500)
 
     // A breath for the dots of busy sessions. In the pill it rides Emba's own
@@ -488,7 +491,9 @@ Item {
             // a glow along the outline while something waits on you
             stroke: root.pending.length && root.mode !== "expanded" ? Qt.alpha(root.ui.accent, pulse.value) : "transparent"
             strokeWidth: root.pending.length && root.mode !== "expanded" ? 2 : 1
-            opacity: root.mode === "hidden" ? 0 : 1
+            // shrink into the corner first, then fade: fading the whole time
+            // looked like a grey block vanishing instead of the island closing
+            opacity: root.mode === "hidden" && shape.width < 60 ? 0 : 1
 
             // the corners follow the shape's size, so they never lag behind it
             Behavior on opacity { NumberAnimation { duration: 180 } }
@@ -664,8 +669,10 @@ Item {
                 readonly property real openness: Math.max(0, Math.min(1, (shape.height - 44) / 88))
                 x: (root.mode === "compact" || root.mode === "expanded" || root.greeting) && !root.sideways ? 8 + 6 * openness : (shape.width - px) / 2
                 y: root.mode === "compact" && root.sideways ? 6 : Math.min((shape.height - px) / 2, 5 + 13 * openness + (1 - openness) * (shape.height - px) / 2)
-                opacity: root.mode === "hidden" || root.mode === "dots" ? 0 : 1
-                running: root.mode !== "hidden" && root.mode !== "dots"
+                // out of sight once the island has shrunk to the corner (not before)
+                readonly property bool tuckedAway: (root.mode === "hidden" || root.mode === "dots") && shape.width < 90
+                opacity: tuckedAway ? 0 : 1
+                running: !tuckedAway
                 mood: root.mood
                 talk: App.voiceState === "speaking" ? App.voiceLevel : 0
                 eager: root.dragging
