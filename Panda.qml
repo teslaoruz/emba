@@ -675,6 +675,8 @@ Item {
     // false where Emba is tiny (the pill): a steady 30 fps timer instead of
     // every display refresh, so the render loop can sleep between frames
     property bool smooth: true
+    // seconds Emba has been animating: other things can keep time with it
+    readonly property real clock: p.t
 
     function advance() {
         const now = Date.now();

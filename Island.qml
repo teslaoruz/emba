@@ -382,26 +382,23 @@ Item {
     readonly property bool opening: mode === "expanded" || mode === "peek"
     // the two main screens share a tab bar: your sessions, and the chat
     readonly property bool tabbed: ["overview", "empty", "ask", "result"].includes(view)
-    // The window (unscaled). A side may only move when the window grows away
-    // from a pinned left or top: resizing from a pinned right or bottom (or
-    // around a centre) moves the window's near side, and the compositor shows a
-    // frame of the old picture at the new place, so the island jumped sideways
-    // at the start and end of every open and close. Those sides stay full size.
-    // The free ones stay snug once settled: a full 480x500 picture costs about
-    // five times the CPU in the busy pill (15% against 3%).
-    readonly property bool resizing: widthAnim.running || heightAnim.running || dragging
-    readonly property size needs: Qt.size(
-        hAlign === 0 && !resizing ? Math.min(480, target.width + 40) : 480,
-        vAlign === 0 && !resizing ? Math.min(500, target.height + 40) : 500)
+    // The window (unscaled). Any resize of a layer surface shows a frame or two
+    // of a wrong picture (moved sideways, or cut short), so the window only
+    // changes size while the island is tucked away and nothing of it shows:
+    // full size whenever any of it is out, a small corner once it has hidden.
+    readonly property bool tucked: mode === "hidden" && !widthAnim.running && !heightAnim.running && !dragging
+    readonly property size needs: tucked ? Qt.size(target.width + 40, target.height + 40) : Qt.size(480, 500)
 
-    // A breath for the dots of busy sessions, at the pill's 30 fps.
-    property real beat: 0
+    // A breath for the dots of busy sessions. In the pill it rides Emba's own
+    // clock: a second timer out of step with it made Qt draw twice as often.
+    // Only the bare dots (Emba asleep) need a timer of their own.
+    readonly property real beat: mode === "dots" ? dotsBeat : panda.clock % 1.2
+    property real dotsBeat: 0
     Timer {
-        running: root.sessions.some(x => ["working", "thinking", "waiting"].includes(x.state)) && (root.mode === "compact" || root.mode === "dots")
+        running: root.mode === "dots" && root.sessions.some(x => ["working", "thinking", "waiting"].includes(x.state))
         interval: 33
         repeat: true
-        onTriggered: root.beat = (root.beat + 0.033) % 1.2
-        onRunningChanged: root.beat = 0
+        onTriggered: root.dotsBeat = (root.dotsBeat + 0.033) % 1.2
     }
     component SessionDot: Rectangle {
         required property var modelData
@@ -431,8 +428,18 @@ Item {
         anim.start();
     }
     onTargetChanged: {
+        // coming out of hiding: the window grows first (its first frames at the
+        // new size can land in the wrong place), then the island, once it has
+        if (!tucked && width < 470 * s)
+            return growFirst.restart();
         tween(widthAnim, target.width);
         tween(heightAnim, target.height);
+    }
+    Timer {
+        id: growFirst
+
+        interval: 60
+        onTriggered: root.targetChanged()
     }
     NumberAnimation { id: widthAnim; target: shape; property: "width" }
     NumberAnimation { id: heightAnim; target: shape; property: "height" }
@@ -1035,7 +1042,10 @@ Item {
         function aim(x, y) {
             // mapToItem(null) is already in window pixels, scale included
             const c = panda.mapToItem(null, panda.width / 2, panda.height / 2);
-            gaze = Qt.point(x - root.origin.x - c.x, y - root.origin.y - c.y);
+            const g = Qt.point(x - root.origin.x - c.x, y - root.origin.y - c.y);
+            // a new point every poll would redraw Emba ten times a second for nothing
+            if (!gaze || Math.abs(g.x - gaze.x) > 0.5 || Math.abs(g.y - gaze.y) > 0.5)
+                gaze = g;
             const tl = shape.mapToItem(null, 0, 0), br = shape.mapToItem(null, shape.width, shape.height);
             const lx = x - root.origin.x, ly = y - root.origin.y;
             inside = lx >= tl.x && lx < br.x + 1 && ly >= tl.y && ly < br.y + 1;
