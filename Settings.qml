@@ -551,7 +551,14 @@ Rectangle {
                         ["resend", "Resend", "recent emails and bounces", "resend.com/api-keys"],
                         ["calcom", "Cal.com", "your next booking", "app.cal.com/settings/developer/api-keys"],
                         ["notion", "Notion", "the page you edited last", "notion.so/my-integrations"],
-                        ["n8n", "n8n", "failed workflow runs", "your n8n → Settings → API"],
+                        ["n8n", "n8n", "failed workflow runs", "your n8n → Settings → API", [["n8n-url", "your n8n address, e.g. https://n8n.example.com"]]],
+                        ["calendar", "Calendar", "your next meetings, and a heads-up 5 min before", "your calendar's settings: the secret iCal / ICS address"],
+                        ["mail", "Mail", "unread mail, and a heads-up for new mail", "an app password from your mail provider (not your real password)",
+                            [["mail-host", "IMAP server, e.g. imap.gmail.com"], ["mail-user", "your email address"]]],
+                        ["bluesky", "Bluesky", "mentions, replies and follows", "bsky.app → Settings → Privacy and security → App passwords",
+                            [["bluesky-handle", "your handle, e.g. you.bsky.social"]]],
+                        ["mastodon", "Mastodon", "mentions, replies and follows", "your server → Preferences → Development → new app with read:notifications",
+                            [["mastodon-url", "your server, e.g. https://mastodon.social"]]],
                         ["anthropic", "Claude API", "chat with Claude on your own key", "console.anthropic.com/settings/keys"],
                         ["openai", "OpenAI", "chat with OpenAI models on your own key", "platform.openai.com/api-keys"],
                         ["google", "Google AI", "chat with Gemini on your own key", "aistudio.google.com/apikey"]
@@ -584,19 +591,25 @@ Rectangle {
                             Link {
                                 visible: integ.has
                                 text: "remove"
-                                onClicked: App.removeKey(integ.modelData[0])
+                                onClicked: App.removeKey([integ.modelData[0]].concat((integ.modelData[4] ?? []).map(f => f[0])))
                             }
                         }
-                        // n8n runs on your own server: it needs its address too
-                        KeyField {
-                            visible: integ.modelData[0] === "n8n" && !App.keysSet["n8n-url"]
-                            hint: "your n8n address, e.g. https://n8n.example.com"
-                            secret: false
-                            onSaved: v => App.saveKey("n8n-url", v)
+                        // what it needs besides the key (a server, a user name), each until given
+                        Repeater {
+                            model: integ.has ? [] : integ.modelData[4] ?? []
+
+                            KeyField {
+                                required property var modelData
+
+                                visible: !App.keysSet[modelData[0]]
+                                hint: modelData[1]
+                                secret: false
+                                onSaved: v => App.saveKey(modelData[0], v)
+                            }
                         }
                         KeyField {
                             visible: !integ.has
-                            hint: `key from ${integ.modelData[3]}`
+                            hint: integ.modelData[3].includes(" ") ? integ.modelData[3] : `key from ${integ.modelData[3]}`
                             onSaved: v => App.saveKey(integ.modelData[0], v)
                         }
                     }

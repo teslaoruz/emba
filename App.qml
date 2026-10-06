@@ -1059,6 +1059,8 @@ Singleton {
         if (typeof m.notice === "string")
             notice(m.notice, typeof m.mood === "string" ? m.mood : "");
     }
+    // a key was saved or removed: every poller looks again now, not in a minute
+    signal pollNow
     Instantiator {
         model: root.pollers
 
@@ -1072,6 +1074,7 @@ Singleton {
                 }
             }
 
+            Component.onCompleted: root.pollNow.connect(() => poller.triggered())
             interval: Math.max(15, Number(modelData.poll.every) || 60) * 1000
             running: true
             repeat: true
@@ -1222,20 +1225,27 @@ Singleton {
         if (!keysProc.running)
             keysProc.running = true;
     }
+    property var keyQueue: []  // saves typed while another was still going
     function saveKey(name, value) {
-        if (!value.trim() || keySave.running)
+        if (!value.trim())
             return;
+        if (keySave.running)
+            return keyQueue = keyQueue.concat([[name, value]]);
         keySave.environment = { EMBA_KEY: value.trim() };  // never on a command line
         keySave.command = [python, emba, "key", "set", name];
         keySave.running = true;
-        if (!(cfg.plugins ?? []).includes("services"))
-            setCfg({ plugins: (cfg.plugins ?? []).concat(["services"]) });
+        // the plugin that shows it comes on with its key
+        const plugin = ({ vercel: "services", stripe: "services", resend: "services", calcom: "services", notion: "services",
+                          n8n: "services", calendar: "calendar", mail: "mail", bluesky: "social", mastodon: "social" })[name];
+        if (plugin && !(cfg.plugins ?? []).includes(plugin))
+            setCfg({ plugins: (cfg.plugins ?? []).concat([plugin]) });
     }
-    function removeKey(name) {
+    // names: one key, or a list (an integration with its address and user name)
+    function removeKey(names) {
         if (keySave.running)
             return;
         keySave.environment = {};
-        keySave.command = [python, emba, "key", "delete", name];
+        keySave.command = [python, emba, "key", "delete"].concat(names);
         keySave.running = true;
     }
     Process {
@@ -1256,7 +1266,14 @@ Singleton {
         onExited: {
             keySave.environment = {};
             root.refreshKeys();
-            root.pluginData = Object.assign({}, root.pluginData, { services: undefined });
+            // panels re-ask with the new keys
+            root.pluginData = Object.assign({}, root.pluginData, { services: undefined, calendar: undefined, mail: undefined, social: undefined });
+            root.pollNow();
+            if (root.keyQueue.length) {
+                const [name, value] = root.keyQueue[0];
+                root.keyQueue = root.keyQueue.slice(1);
+                root.saveKey(name, value);
+            }
         }
     }
 

@@ -61,7 +61,12 @@ and get a small cheer when they finish. For Claude Code, Codex, Gemini CLI and o
   and the island shows a line from each: the latest deployment, today's payments, bounced emails,
   your next booking, the page you edited last, failed workflow runs. Keys stay in your system
   keyring (Keychain, Credential Manager, Secret Service), never in a file. GitHub needs no key: it
-  uses the `gh` you're logged in with.
+  uses the `gh` you're logged in with, shows pull requests waiting for your review, and tells you
+  when the checks on an agent's branch pass or fail.
+- **Your day, too.** Add your calendar's private link for a heads-up five minutes before a
+  meeting; your mail (IMAP with an app password) for unread mail and a heads-up when something
+  new arrives; Bluesky or Mastodon for mentions and replies. All in Settings → Integrations, all
+  optional, all read-only: Emba never marks mail as read or posts anything.
 - **Little sounds**, if you want them: a chime when an agent needs you, a jingle when it's done.
 - **Make it yours.** It follows your desktop's colours (Caelestia, pywal, or your own), sits in
   any corner, and can be extended with plugins.

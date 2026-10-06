@@ -1,0 +1,6 @@
+{
+  "name": "Mail",
+  "description": "Unread mail and a heads-up when new mail arrives, over IMAP with an app password. Set it up in Settings → Integrations.",
+  "qml": "View.qml",
+  "poll": { "every": 120, "run": ["{python}", "{plugin}/status.py"] }
+}

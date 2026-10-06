@@ -1,0 +1,6 @@
+{
+  "name": "Social",
+  "description": "Mentions, replies and follows on Bluesky and Mastodon, with a heads-up when something new comes in. Set it up in Settings → Integrations.",
+  "qml": "View.qml",
+  "poll": { "every": 120, "run": ["{python}", "{plugin}/status.py"] }
+}

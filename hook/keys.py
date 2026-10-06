@@ -2,7 +2,7 @@
 Windows Credential Manager, the Secret Service on Linux), never in a file.
 
     python keys.py set NAME        the key comes from $EMBA_KEY (never the command line)
-    python keys.py delete NAME
+    python keys.py delete NAME...
     python keys.py list            JSON {name: true} for every known name that has a key
     python keys.py get NAME        prints the key (for Emba's own helpers only)
 """
@@ -11,7 +11,9 @@ import os
 import sys
 
 SERVICE = "emba"
-NAMES = ["vercel", "stripe", "resend", "calcom", "notion", "n8n", "n8n-url", "anthropic", "openai", "google", "phone"]
+NAMES = ["vercel", "stripe", "resend", "calcom", "notion", "n8n", "n8n-url", "anthropic", "openai", "google", "phone",
+         "calendar", "mail-host", "mail-user", "mail", "bluesky-handle", "bluesky", "bluesky-session",
+         "mastodon-url", "mastodon"]
 
 
 def keyring():
@@ -25,7 +27,14 @@ def main(argv):
     if op == "list":
         k = keyring()
         print(json.dumps({n: True for n in NAMES if k.get_password(SERVICE, n)}))
-    elif op in ("set", "get", "delete") and name in NAMES:
+    elif op == "delete" and len(argv) > 1 and all(n in NAMES for n in argv[1:]):
+        k = keyring()
+        for n in argv[1:]:  # an integration and its other fields (address, user...) go together
+            try:
+                k.delete_password(SERVICE, n)
+            except Exception:
+                pass  # already gone
+    elif op in ("set", "get") and name in NAMES:
         k = keyring()
         if op == "set":
             value = os.environ.get("EMBA_KEY", "").strip()

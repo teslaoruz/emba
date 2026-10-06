@@ -1,0 +1,6 @@
+{
+  "name": "Calendar",
+  "description": "Your next meetings from a private calendar link, and a heads-up 5 minutes before. Add the link in Settings → Integrations.",
+  "qml": "View.qml",
+  "poll": { "every": 60, "run": ["{python}", "{plugin}/status.py"] }
+}

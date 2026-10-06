@@ -328,6 +328,9 @@ def keys(args):
     # chatting on an Anthropic key goes through the official SDK: fetch it with the key
     if args[:2] == ["set", "anthropic"] and subprocess.run([py, "-c", "import anthropic"], capture_output=True).returncode != 0:
         subprocess.run([py, "-m", "pip", "install", "--quiet", "anthropic"], check=True)
+    # the calendar link is read with a library that knows repeats and time zones
+    if args[:2] == ["set", "calendar"] and subprocess.run([py, "-c", "import recurring_ical_events"], capture_output=True).returncode != 0:
+        subprocess.run([py, "-m", "pip", "install", "--quiet", "recurring-ical-events"], check=True)
     return subprocess.run([py, str(APP / "hook" / "keys.py")] + list(args)).returncode
 
 
