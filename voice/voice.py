@@ -53,14 +53,17 @@ def arg(name, default):
 _models = {}
 
 
-def whisper(name):
+def whisper(name, threads=0):
+    """threads: 0 = Whisper's default (several cores, for a quick answer when you
+    talk to Emba); the always-on wake listener asks for 1 so it never hogs the machine."""
     if name not in _models:
         from faster_whisper import WhisperModel
-        _models[name] = WhisperModel(name, device="cpu", compute_type="int8", download_root=str(data_dir() / "whisper"))
+        _models[name] = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=threads,
+                                     download_root=str(data_dir() / "whisper"))
     return _models[name]
 
 
-def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True):
+def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True, factor=1.7):
     """Record one utterance: wait for speech, stop after a pause. Returns float32 audio or None."""
     import numpy as np
     import sounddevice as sd
@@ -78,7 +81,7 @@ def record(max_wait=6.0, max_len=15.0, silence=1.0, threshold=None, report=True)
         floor = sorted(rms(q.get()) for _ in range(4))[1]
         # 1.7x the room: low enough for a quiet, noisy laptop mic (speech there
         # only just clears the hiss), high enough that the hiss alone never does
-        thr = threshold or max(0.004, floor * 1.7)
+        thr = threshold or max(0.004, floor * factor)
         chunks, preroll, started, quiet, loud, t0 = [], [], False, 0.0, 0, time.time()
         while True:
             block = q.get()
@@ -148,16 +151,25 @@ def wake():
     words = [w.strip().lower() for w in arg("--words", "emba,ember,amba,embah").split(",") if w.strip()]
     model = arg("--model", "tiny")
     pattern = re.compile(r"\b(hey |hi |ok |okay )?(" + "|".join(map(re.escape, words)) + r")\b")
-    whisper(model)  # load once, up front
+    whisper(model, threads=1)  # load once, up front; one core at most, it never stops
     out(state="ready")
+    factor, misses = 1.7, []  # how far above the room a sound must be; recent sounds that weren't it
     while True:
-        # short phrases only: a wake word is one or two words
-        audio = record(max_wait=3600, max_len=3.0, silence=0.5, report=False)
-        if audio is None or len(audio) > 3.0 * RATE:
+        # "Hey Emba" is short: a sound still going after 2 s is talk, music or a video,
+        # and isn't worth asking Whisper about (each question costs a 30 s pass of it)
+        audio = record(max_wait=3600, max_len=2.0, silence=0.5, report=False, factor=factor)
+        if audio is None or len(audio) >= 2.0 * RATE - BLOCK:
             continue
         heard = transcribe(audio, model).lower()
         if pattern.search(heard):
             out(wake=True, heard=heard)
+            factor, misses = 1.7, []
+            continue
+        # A busy room: many sounds and none of them the wake word. Be choosier
+        # for a while (up to 3x the room), then ease back once it's calm.
+        now = time.time()
+        misses = [t for t in misses if now - t < 60] + [now]
+        factor = min(3.0, 1.7 + 0.1 * max(0, len(misses) - 5))
 
 
 # ---------------------------------------------------------------- speaking
