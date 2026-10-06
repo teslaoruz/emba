@@ -178,6 +178,55 @@ def autostart_state():
     return bool(p and p.exists())
 
 
+def unit_text(line):
+    # Started with the user session, not graphical-session.target: compositors
+    # started without uwsm (plain Hyprland, sway...) never reach that target, so
+    # Emba never started. `emba run` waits for the display itself.
+    return ("[Unit]\nDescription=Emba, a red panda that watches your coding agents\n"
+            "PartOf=graphical-session.target\nAfter=graphical-session.target\n\n"
+            f"[Service]\nExecStart={line}\nRestart=on-failure\nRestartSec=2\n\n"
+            "[Install]\nWantedBy=default.target\n")
+
+
+def migrate_unit():
+    """Move a unit from an older Emba (WantedBy=graphical-session.target) to the user session."""
+    p = autostart_path()
+    try:
+        if p.suffix != ".service" or "WantedBy=graphical-session.target" not in p.read_text():
+            return
+    except OSError:
+        return
+    p.write_text(unit_text(" ".join(f'"{a}"' for a in run_line())))
+    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+    subprocess.run(["systemctl", "--user", "reenable", "emba.service"], capture_output=True)
+
+
+DISPLAY_VARS = ("WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "XDG_CURRENT_DESKTOP", "SWAYSOCK", "NIRI_SOCKET")
+
+
+def wait_for_display():
+    """Started with the session, Emba may be up before the compositor: wait (quietly)
+    until a display really exists, taking its variables from systemd's environment
+    once the compositor has put them there."""
+    if SYSTEM != "Linux":
+        return
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    while True:
+        env = dict(os.environ)
+        try:
+            out = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=5).stdout
+            env.update(dict(x.split("=", 1) for x in out.splitlines() if "=" in x and x.split("=", 1)[0] in DISPLAY_VARS))
+        except (OSError, subprocess.SubprocessError):
+            pass
+        wl = env.get("WAYLAND_DISPLAY", "")
+        if (wl and (runtime / wl).exists()) or (not wl and env.get("DISPLAY")):
+            for k in DISPLAY_VARS:
+                if env.get(k):
+                    os.environ[k] = env[k]
+            return
+        time.sleep(2)
+
+
 def autostart(on):
     if SYSTEM == "Windows":
         import winreg
@@ -207,10 +256,7 @@ def autostart(on):
         elif p.suffix == ".service":
             if on:
                 p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text("[Unit]\nDescription=Emba, a red panda that watches your coding agents\n"
-                             "PartOf=graphical-session.target\nAfter=graphical-session.target\n\n"
-                             f"[Service]\nExecStart={line}\nRestart=on-failure\nRestartSec=2\n\n"
-                             "[Install]\nWantedBy=graphical-session.target\n")
+                p.write_text(unit_text(line))
                 subprocess.run(["systemctl", "--user", "daemon-reload"])
                 ipc("quit")  # hand over to systemd
                 time.sleep(0.5)
@@ -587,6 +633,8 @@ def main():
         time.sleep(0.6)
         start()
     elif cmd == "run":
+        migrate_unit()
+        wait_for_display()
         rc = subprocess.call(host_command())
         # `emba quit` ends Quickshell with SIGTERM: a clean exit, so a service manager does not restart it
         sys.exit(0 if rc == -15 else rc)
